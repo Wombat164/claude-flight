@@ -1,0 +1,33 @@
+# flight-doctor configuration -- copy to ~/.config/flight-doctor.conf and edit.
+# Sourced by flight-doctor.sh before defaults are applied. Keep your real copy
+# PRIVATE (it may hold a capability URL) and never commit it -- .gitignore
+# already excludes *.conf.
+
+# tmux session name + the launcher that (re)spawns the resume-pinned session.
+# RC_NAME="flight"
+# FLIGHT_LAUNCHER="$HOME/.local/bin/flight-claude.sh"
+
+# ntfy topic for CRITICAL alerts (auth-hold / mutation-hold / outage / flap /
+# relaunch). Leave unset to DISABLE alerting. The topic is a bearer capability:
+# anyone who knows it can READ your alerts and POST fakes -- prefer an
+# authenticated or self-hosted ntfy, and choose an unguessable suffix.
+# FLIGHT_NTFY_URL="https://ntfy.sh/CHANGE-ME-to-an-unguessable-topic"
+
+# Tuning (all optional; defaults shown):
+# FLIGHT_STALL_SECS=180             # spinner age (s) before it counts as stalled
+# FLIGHT_HEARTBEAT_SECS=3600        # min gap between "all healthy" log lines
+# FLIGHT_ALERT_COOLDOWN_SECS=1800   # per-key alert rate limit
+# FLIGHT_FLAP_MAX=3                 # restarts allowed within the flap window...
+# FLIGHT_FLAP_WINDOW=1800           # ...before the circuit breaker trips
+# FLIGHT_LOG_MAX_BYTES=262144       # event-log rotation threshold
+# FLIGHT_LOG_KEEP_LINES=2000        # lines retained after a rotation
+# FLIGHT_ALERT_CLICK   one-tap deep-link for critical alerts (ntfy Click action).
+#                      Point at an AUTH-GATED OUT-OF-BAND terminal (Teleport/ttyd/
+#                      Cockpit), NOT the claude.ai session URL: alerts often fire
+#                      when Remote Control itself is down (a dead RC link is useless),
+#                      and the session URL is a bearer credential on a shared topic.
+
+# Extend the catastrophic denylist WITHOUT editing the script (built-ins are just
+# defaults; yours will differ). Both are OR'd into MUTATION_RE:
+# FLIGHT_MUTATION_EXTRA="DROP[[:space:]]+DATABASE|flyctl[[:space:]]+destroy"
+# FLIGHT_DENYLIST_FILE="$HOME/.config/flight-denylist"   # one ERE per line (see flight-denylist.example)

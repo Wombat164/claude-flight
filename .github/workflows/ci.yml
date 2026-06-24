@@ -1,0 +1,92 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read   # least privilege for GITHUB_TOKEN
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck + syntax
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck --severity=warning bin/*.sh hooks/*.sh ci/*.sh
+          for f in bin/*.sh hooks/*.sh ci/*.sh; do bash -n "$f"; done
+
+  scaffolding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/check-scaffolding.sh
+
+  leak-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: identity + secret gate (hard, dependency-free)
+        run: ci/leak-check.sh
+      - name: gitleaks (entropy/secret scan over history)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true   # advisory; free for public repos
+
+  # Supported target: Linux + GNU coreutils. Blocking.
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bin/flight-doctor.test.sh
+      - run: bin/flight-doctor.integration.test.sh
+
+  # Other glibc distros: should pass (GNU coreutils). Blocking.
+  tests-distros:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable-slim", "fedora:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      - name: deps (incl. git for checkout)
+        run: |
+          if command -v apt-get >/dev/null; then apt-get update -qq && apt-get install -y bash coreutils grep gawk sed git procps; fi
+          if command -v dnf     >/dev/null; then dnf install -y bash coreutils grep gawk sed git procps-ng; fi
+      - uses: actions/checkout@v4
+      - run: bash bin/flight-doctor.test.sh
+      - run: bash bin/flight-doctor.integration.test.sh
+
+  # Best-effort (musl/BSD): surfaces portability honestly, never blocks.
+  tests-best-effort:
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, container: "alpine:latest", label: "alpine/musl" }
+          - { runner: macos-latest,  container: "",              label: "macos/bsd" }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: deps (alpine)
+        if: matrix.container != ''
+        run: apk add --no-cache bash coreutils grep gawk sed git procps
+      - name: deps (macos -- bash 4.4+ + GNU coreutils via brew)
+        if: matrix.container == ''
+        run: brew install bash coreutils gnu-sed grep gawk || true
+      - uses: actions/checkout@v4
+      - name: tests (${{ matrix.label }})
+        run: |
+          if [ -z "${{ matrix.container }}" ]; then
+            export PATH="$(brew --prefix coreutils 2>/dev/null)/libexec/gnubin:$(brew --prefix 2>/dev/null)/bin:$PATH"
+          fi
+          bash --version | head -1
+          bash bin/flight-doctor.test.sh
+          bash bin/flight-doctor.integration.test.sh

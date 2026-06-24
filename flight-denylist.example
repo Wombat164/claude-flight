@@ -1,0 +1,26 @@
+# claude-flight extra denylist -- copy to ~/.config/flight-denylist and add your own.
+# One POSIX-extended-regex (ERE) alternative per line. Blank lines and lines whose
+# first non-space char is '#' are ignored. Each line is OR'd into the built-in
+# MUTATION_RE, so a permission gate whose command matches ANY line is HELD for a
+# human instead of auto-approved. Matching is case-insensitive, on a wrap-joined,
+# quote-stripped capture of the gate.
+#
+# Tune these to YOUR stack -- the built-ins are generic defaults, not coverage.
+# Examples:
+
+# your cloud / infra CLIs
+# flyctl[[:space:]]+(destroy|apps[[:space:]]+destroy)
+# railway[[:space:]]+down
+# vercel[[:space:]]+(rm|remove)
+
+# your databases
+# DROP[[:space:]]+(DATABASE|TABLE)
+# TRUNCATE[[:space:]]+TABLE
+# redis-cli[[:space:]]+FLUSHALL
+
+# your secret stores / package registries
+# vault[[:space:]]+(delete|secrets[[:space:]]+disable)
+# npm[[:space:]]+unpublish
+
+# anything that touches your specific protected paths
+# rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*[[:space:]]+/srv/important-data

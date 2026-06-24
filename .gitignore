@@ -1,0 +1,9 @@
+# Never publish a real deployment's config (may hold a capability URL).
+*.conf
+!*.conf.example
+
+# Runtime state / logs.
+state/
+*.log
+*.heartbeat
+*.lock

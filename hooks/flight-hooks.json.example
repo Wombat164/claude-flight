@@ -1,0 +1,11 @@
+{
+  "_comment": "claude-flight hook wiring. Install flight-notify.sh somewhere on disk, point the commands at its ABSOLUTE path (Claude runs hook commands via a shell, so $HOME expands), then launch the session with --settings pointing at this file (the launcher does this when FLIGHT_SETTINGS is set). Canonical hook element form: {type:command,command:...}.",
+  "hooks": {
+    "SessionStart":     [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh SessionStart"}]}],
+    "SessionEnd":       [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh SessionEnd"}]}],
+    "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh UserPromptSubmit"}]}],
+    "Stop":             [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh Stop"}]}],
+    "StopFailure":      [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh StopFailure"}]}],
+    "Notification":     [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.local/bin/flight-notify.sh Notification"}]}]
+  }
+}

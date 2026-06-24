@@ -1,0 +1,10 @@
+[Unit]
+Description=flight-doctor: keep a remote-control claude session alive + self-heal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# %h = the user's home. Adjust if you install the script elsewhere.
+ExecStart=%h/.local/bin/flight-doctor
+Nice=10
