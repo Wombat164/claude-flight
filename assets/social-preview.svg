@@ -1,15 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="claude-flight">
   <title>claude-flight</title>
+  <defs>
+    <clipPath id="dial2"><circle cx="32" cy="32" r="23"/></clipPath>
+    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#388bfd"/>
+      <stop offset="1" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
   <rect width="1280" height="640" fill="#0d1117"/>
-  <!-- logo: instrument horizon + prompt cursor -->
-  <g transform="translate(150 200) scale(3.75)" stroke="#58a6ff" fill="#58a6ff">
-    <circle cx="32" cy="32" r="26" fill="none" stroke-width="4"/>
-    <line x1="9" y1="32" x2="55" y2="32" stroke-width="3" stroke-linecap="round"/>
-    <path d="M27 23 L41 32 L27 41 Z" stroke="none"/>
+  <!-- logo (the attitude-indicator mark), vertically centred -->
+  <g transform="translate(150 230) scale(2.9)">
+    <g clip-path="url(#dial2)">
+      <rect x="9" y="9"  width="46" height="23" fill="url(#sky2)"/>
+      <rect x="9" y="32" width="46" height="23" fill="#d29922"/>
+    </g>
+    <circle cx="32" cy="32" r="23" fill="none" stroke="#e6edf3" stroke-width="3.5"/>
+    <line x1="9.5" y1="32" x2="54.5" y2="32" stroke="#e6edf3" stroke-width="2.5"/>
+    <path d="M26 24.5 L40 32 L26 39.5 Z" fill="#3fb950" stroke="#0d1117" stroke-width="1.3" stroke-linejoin="round"/>
   </g>
-  <!-- wordmark + tagline -->
-  <text x="470" y="285" font-family="monospace" font-size="86" font-weight="bold" fill="#e6edf3">claude-flight</text>
-  <text x="472" y="345" font-family="monospace" font-size="30" fill="#8b949e">keep a remote Claude Code session alive, and self-heal it</text>
-  <text x="472" y="400" font-family="monospace" font-size="24" fill="#d29922">a power tool with a real footgun -- read SECURITY.md</text>
-  <text x="472" y="452" font-family="monospace" font-size="22" fill="#3fb950">MIT  -  tested against Claude Code 2.1.187</text>
+  <!-- wordmark + tagline (sized to fit within 1280) -->
+  <text x="470" y="282" font-family="monospace" font-size="82" font-weight="bold" fill="#e6edf3">claude-flight</text>
+  <text x="472" y="338" font-family="monospace" font-size="24" fill="#8b949e">keep a remote Claude Code session alive, self-heal it</text>
+  <text x="472" y="388" font-family="monospace" font-size="22" fill="#d29922">a power tool with a real footgun -- read SECURITY.md</text>
+  <text x="472" y="436" font-family="monospace" font-size="21" fill="#3fb950">MIT  -  tested against Claude Code 2.1.187</text>
 </svg>

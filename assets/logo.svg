@@ -1,9 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="claude-flight">
   <title>claude-flight</title>
-  <!-- instrument bezel: keep it level / aloft -->
-  <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" stroke-width="4"/>
-  <!-- horizon line -->
-  <line x1="9" y1="32" x2="55" y2="32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-  <!-- prompt cursor / aircraft riding the horizon -->
-  <path d="M27 23 L41 32 L27 41 Z" fill="currentColor"/>
+  <defs>
+    <clipPath id="dial"><circle cx="32" cy="32" r="23"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#388bfd"/>
+      <stop offset="1" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
+  <!-- attitude indicator: blue sky over amber ground, split by the horizon -->
+  <g clip-path="url(#dial)">
+    <rect x="9" y="9"  width="46" height="23" fill="url(#sky)"/>
+    <rect x="9" y="32" width="46" height="23" fill="#d29922"/>
+  </g>
+  <!-- bezel + horizon -->
+  <circle cx="32" cy="32" r="23" fill="none" stroke="#e6edf3" stroke-width="3.5"/>
+  <line x1="9.5" y1="32" x2="54.5" y2="32" stroke="#e6edf3" stroke-width="2.5"/>
+  <!-- prompt cursor riding the horizon: "the session is level and alive" -->
+  <path d="M26 24.5 L40 32 L26 39.5 Z" fill="#3fb950" stroke="#0d1117" stroke-width="1.3" stroke-linejoin="round"/>
 </svg>
