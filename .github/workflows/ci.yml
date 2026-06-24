@@ -73,6 +73,7 @@ jobs:
         run: |
           export PATH="$(brew --prefix coreutils 2>/dev/null)/libexec/gnubin:$(brew --prefix 2>/dev/null)/bin:$PATH"
           bash bin/flight-doctor.test.sh
+          bash bin/flight-doctor.integration.test.sh
           bash bin/flight-doctor.live.test.sh
 
   # Other glibc distros: should pass (GNU coreutils). Blocking.
@@ -100,7 +101,6 @@ jobs:
       matrix:
         include:
           - { runner: ubuntu-latest, container: "alpine:latest", label: "alpine/musl" }
-          - { runner: macos-latest,  container: "",              label: "macos/bsd" }
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     steps:

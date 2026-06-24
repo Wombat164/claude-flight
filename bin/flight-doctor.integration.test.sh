@@ -80,7 +80,7 @@ run(){ # run NAME ; uses FIX_* from caller env; sets OUT + ACTIONS file
   ACTIONS="$TMP/actions.$1"; : > "$ACTIONS"; export ACTIONS
   local st="$TMP/state.$1"; rm -rf "$st"
   OUT="$(FLIGHT_CONF=/dev/null FLIGHT_STATE_DIR="$st" FLIGHT_SETTINGS=/nonexistent \
-        FLIGHT_RC_LABEL=flight FLIGHT_SESSION=flight \
+        FLIGHT_RC_LABEL=flight FLIGHT_SESSION=flight IS_MAC=0 \
         PATH="$S:$PATH" bash "$DOC" 2>&1)"
 }
 acted(){ grep -q "$1" "$ACTIONS" 2>/dev/null; }   # an action was recorded

@@ -72,7 +72,11 @@ TESTED_CC_VERSION="2.1.190"
 # --- portability shims: Linux/GNU is the primary target; these keep macOS working
 # WITHOUT changing the Linux path (the GNU/ss/flock branch is identical to before,
 # so Linux behaviour cannot regress). ---
-case "$(uname -s 2>/dev/null)" in Darwin) IS_MAC=1 ;; *) IS_MAC=0 ;; esac
+# IS_MAC: 1 on macOS. Env-overridable so the test harness can force the Linux
+# (ss/flock) path deterministically even when running on a macOS CI runner.
+if [ -z "${IS_MAC:-}" ]; then
+  case "$(uname -s 2>/dev/null)" in Darwin) IS_MAC=1 ;; *) IS_MAC=0 ;; esac
+fi
 # file mtime as epoch seconds: GNU `stat -c %Y`, BSD (macOS) `stat -f %m` fallback.
 _mtime(){ stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
 # CATASTROPHIC-ONLY hold-list (user policy: routine yes, catastrophic no).
