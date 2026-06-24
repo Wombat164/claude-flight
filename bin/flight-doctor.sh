@@ -277,7 +277,7 @@ kill_resume(){ # kill_resume [reason]
   now="$(date +%s)"; cutoff=$(( now - FLAP_WINDOW ))
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   [ -f "$ff" ] && { awk -v c="$cutoff" '$1>=c' "$ff" > "$ff.tmp" 2>/dev/null && mv "$ff.tmp" "$ff"; }
-  n="$(wc -l < "$ff" 2>/dev/null || echo 0)"; n="${n//[^0-9]/}"; n="${n:-0}"
+  n=0; [ -f "$ff" ] && n="$(wc -l < "$ff" 2>/dev/null)"; n="${n//[^0-9]/}"; n="${n:-0}"
   if [ "$n" -ge "$FLAP_MAX" ]; then
     logev ERROR flap "restart suppressed: $n restarts within ${FLAP_WINDOW}s (flapping)"
     alert flap high "flight: restart loop" "flight restarted $n times in $((FLAP_WINDOW/60))min (flapping). Auto-restart paused; needs a human."
