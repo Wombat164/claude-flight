@@ -3,8 +3,13 @@
 # PRIVATE (it may hold a capability URL) and never commit it -- .gitignore
 # already excludes *.conf.
 
-# tmux session name + the launcher that (re)spawns the resume-pinned session.
-# RC_NAME="flight"
+# Naming. The tmux session name (local) is SEPARATE from the remote-control name
+# shown in the Claude Code web/desktop session list -- so several boxes are
+# distinguishable there. Defaults: tmux=flight, RC name=<session>-<host>-<user>.
+# Both the launcher AND flight-doctor read this file, so overrides stay in sync.
+# FLIGHT_SESSION="flight"                       # tmux session name
+# FLIGHT_HOST="$(hostname -s)"                  # host component of the RC name
+# FLIGHT_RC_LABEL="flight-myhost-me"            # override the whole RC/UI name
 # FLIGHT_LAUNCHER="$HOME/.local/bin/flight-claude.sh"
 
 # ntfy topic for CRITICAL alerts (auth-hold / mutation-hold / outage / flap /

@@ -15,7 +15,10 @@
 # Configuration -- all site-specific values come from env vars or an optional
 # config file (see flight-doctor.conf.example); the defaults below are generic
 # so this script is publishable as-is. Tunables (env or config file):
-#   RC_NAME / FLIGHT_LAUNCHER                tmux session name / respawn launcher
+#   FLIGHT_SESSION (default flight)          tmux session name (local target)
+#   FLIGHT_RC_LABEL / FLIGHT_HOST            remote-control name in the Claude Code
+#                                            web/desktop UI (default <session>-<host>-<user>)
+#   FLIGHT_LAUNCHER                          respawn launcher
 #   FLIGHT_NTFY_URL                          ntfy topic for alerts (empty = off)
 #   FLIGHT_CONF                              config path override (/dev/null = none)
 #   FLIGHT_STALL_SECS      (default 180)     spinner age before it counts stalled
@@ -31,10 +34,20 @@ for _c in "${FLIGHT_CONF:-}" "$HOME/.config/flight-doctor.conf" "/etc/flight-doc
   # shellcheck source=/dev/null
   [ -n "$_c" ] && [ -r "$_c" ] && { . "$_c"; break; }
 done
-SESSION="${RC_NAME:-flight}"
-# Human-facing identity for alerts/status (NOT a tmux target): which box+user this
-# session runs as. Overridable; defaults to <session>@<short-host>:<user>.
-FLIGHT_ID="${FLIGHT_ID:-$SESSION@$(hostname -s 2>/dev/null || hostname):$(id -un)}"
+SESSION="${FLIGHT_SESSION:-${RC_NAME:-flight}}"   # tmux session name (local target); RC_NAME honored for back-compat
+# tmux target GOTCHA (learned the hard way): use the PLAIN session name for pane
+# ops (capture-pane / send-keys / display-message). The exact-match form "=NAME"
+# is valid for `has-session` but resolves to NOTHING as a pane target, so
+# capture-pane silently returns an empty pane -> the watchdog goes BLIND (can't
+# see or accept the trust prompt / gates, so the session sticks unprimed and never
+# registers as an available RC session). Never prefix a pane target with "=".
+FLIGHT_HOST="${FLIGHT_HOST:-$(hostname -s 2>/dev/null || hostname)}"
+# The `claude --remote-control` name shown in the Claude Code web/desktop session
+# list -- host/user-aware so deployments on different boxes are distinguishable.
+# Defaults to <session>-<host>-<user>; override the whole label with
+# FLIGHT_RC_LABEL, or just the host component with FLIGHT_HOST.
+RC_LABEL="${FLIGHT_RC_LABEL:-${SESSION}-${FLIGHT_HOST}-$(id -un)}"
+FLIGHT_ID="$RC_LABEL"   # alerts/status identity == the RC name (host+user aware)
 LAUNCHER="${FLIGHT_LAUNCHER:-$HOME/.local/bin/flight-claude.sh}"
 STALL_SECS="${FLIGHT_STALL_SECS:-180}"
 STATE_DIR="${FLIGHT_STATE_DIR:-$HOME/.local/state/flight}"
@@ -126,22 +139,34 @@ RO="${1:-}"
 HEALED=0
 
 say(){ printf '%s\n' "$*"; }
-pane(){ tmux capture-pane -t "=$SESSION" -p 2>/dev/null; }
+pane(){ tmux capture-pane -t "$SESSION" -p 2>/dev/null; }
 # Pane capture with wrapped lines JOINED (-J). A command wider than the pane
 # otherwise splits across rows and a dangerous token can straddle the wrap,
 # evading MUTATION_RE/AUTH_RE. Use this -- NOT pane() -- for any SECURITY match.
 # (Kept separate from pane() so the stall "frozen frame" diff is unaffected.)
-pane_j(){ tmux capture-pane -t "=$SESSION" -p -J 2>/dev/null; }
+pane_j(){ tmux capture-pane -t "$SESSION" -p -J 2>/dev/null; }
 # Wrap-joined pane with quotes stripped -- for the catastrophic match, so a
 # quoted target (rm -rf "/etc") cannot evade the denylist.
 pane_cmd(){ pane_j | tr -d "\"'"; }
 # Resolve the flight claude pid. Anchored to the FULL invocation AND filtered by
 # comm=claude, so a stray process whose cmdline merely contains the pattern (an
 # editor, a grep, this very script) can never be selected and killed.
+# Resolve OUR claude pid by the remote-control label, then confirm comm==claude.
+# The comm filter is load-bearing: NEVER kill by `pkill -f "<label>"` -- that
+# pattern also matches the watchdog's (or any shell's) OWN command line containing
+# the label, so a pattern-kill can take out the killer itself. Always kill by the
+# pid this returns (lesson learned: a self-matching pkill killed the operator's shell).
 flightpid(){
-  local pid
-  for pid in $(pgrep -f "claude --remote-control $SESSION" 2>/dev/null); do
-    [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "claude" ] && { echo "$pid"; return; }
+  local pid args
+  for pid in $(pgrep -f "claude --remote-control $RC_LABEL" 2>/dev/null); do
+    [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "claude" ] || continue
+    # pgrep -f is a SUBSTRING match, so RC_LABEL=flight also matches a
+    # flight-web01-deploy cmdline. Anchor to a COMPLETE token: the label must be
+    # followed by a space (the next arg) or be the exact end of the command line.
+    args="$(ps -o args= -p "$pid" 2>/dev/null)"
+    case "$args" in
+      *"--remote-control $RC_LABEL "*|*"--remote-control $RC_LABEL") echo "$pid"; return ;;
+    esac
   done
 }
 # spinner elapsed in seconds, or nothing if no spinner is running
@@ -269,7 +294,7 @@ kill_resume(){ # kill_resume [reason]
   # and pressing 1 would auto-approve it WITHOUT consulting the denylist. Anything
   # else is left for the next cycle's settle/hold logic (which runs MUTATION_RE).
   if grep -q "trust this folder" <<<"$(pane)"; then
-    tmux send-keys -t "=$SESSION" '1' Enter
+    tmux send-keys -t "$SESSION" '1' Enter
   fi
   sleep 8; HEALED=1
   logev INFO kill_resume "restart complete (newpid=$(flightpid))"
@@ -347,9 +372,12 @@ selftest(){
   local warn=0 crit=0
   chk(){ case "$1" in WARN) warn=1;; FAIL) crit=1;; esac; printf '  [%-4s] %s\n' "$1" "$2"; }
   say "flight-doctor --selftest [$FLIGHT_ID] (tested against Claude Code $TESTED_CC_VERSION):"
-  tmux has-session -t "=$SESSION" 2>/dev/null && chk OK "tmux session '$SESSION' present" || chk FAIL "tmux session '$SESSION' MISSING"
+  tmux has-session -t "$SESSION" 2>/dev/null && chk OK "tmux session '$SESSION' present" || chk FAIL "tmux session '$SESSION' MISSING"
+  np="$(tmux list-panes -t "$SESSION" 2>/dev/null | wc -l)"
+  [ "${np:-1}" -le 1 ] && chk OK "single pane (targeted unambiguously)" \
+    || chk WARN "$np panes in '$SESSION' -> ops hit the ACTIVE pane; keep claude's pane active/unsplit"
   local P; P="$(flightpid)"
-  [ -n "$P" ] && chk OK "claude pid $P (comm-filtered)" || chk WARN "no 'claude --remote-control $SESSION' pid"
+  [ -n "$P" ] && chk OK "claude pid $P (comm-filtered)" || chk WARN "no 'claude --remote-control $RC_LABEL' pid"
   [ -s "$HOME/.local/state/flight-resume" ] && chk OK "resume-pin present" || chk WARN "resume-pin missing/empty (restarts not lossless)"
   local v; v="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
   if [ -z "$v" ]; then chk WARN "claude --version unreadable"
@@ -392,7 +420,7 @@ fi
 log_rotate
 
 # 1. Ensure the session exists.
-if ! tmux has-session -t "=$SESSION" 2>/dev/null; then
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   if [ "$RO" = "--status" ]; then say "flight: DOWN (no tmux session)"; exit 1; fi
   say "flight DOWN -> launching..."
   logev WARN relaunch "tmux session was down; launched via $LAUNCHER"
@@ -406,18 +434,18 @@ if [ "$RO" != "--status" ]; then
     p="$(pane)"
     if grep -q "trust this folder" <<<"$p"; then
       logev INFO trust "accepted trust-folder prompt"
-      say "trust prompt -> accepting"; tmux send-keys -t "=$SESSION" '1' Enter; sleep 5; continue
+      say "trust prompt -> accepting"; tmux send-keys -t "$SESSION" '1' Enter; sleep 5; continue
     fi
     if gate_confirmed "$p"; then
       # expand collapsed content first so the denylist sees the FULL command, then
       # re-evaluate against the expanded pane (pane_cmd re-captures live).
       if grep -qiE "$COLLAPSE_RE" <<<"$p"; then
         logev INFO gate_expand "collapsed content at gate -> Ctrl+O before deciding"
-        tmux send-keys -t "=$SESSION" C-o; sleep 1
+        tmux send-keys -t "$SESSION" C-o; sleep 1
       fi
       if grep -qiE "$MUTATION_RE" <<<"$(pane_cmd)"; then break; fi
       logev INFO gate_approve "routine permission gate approved (two-signal confirmed)"
-      say "routine gate (bash/edit/write) -> approving (this time)"; tmux send-keys -t "=$SESSION" '1' Enter; sleep 3; continue
+      say "routine gate (bash/edit/write) -> approving (this time)"; tmux send-keys -t "$SESSION" '1' Enter; sleep 3; continue
     fi
     break
   done
@@ -492,7 +520,7 @@ if [ -n "$el" ] && [ "$el" -ge "$STALL_SECS" ]; then
     if [ "$RO" = "--status" ]; then say "flight: STALLED spinner (${el}s) (run flight-doctor)"; exit 2; fi
     logev INFO stall_escape "spinner stalled ${el}s (tokens $tk1->$tk2) -> Escape"
     say "STALLED spinner (${el}s, no child, content+tokens frozen) -> sending Escape..."
-    tmux send-keys -t "=$SESSION" Escape; sleep 5
+    tmux send-keys -t "$SESSION" Escape; sleep 5
     el2="$(spinner_elapsed)"
     if [ -n "$el2" ] && [ "$el2" -ge "$STALL_SECS" ] && [ "$(content_sig)" = "$s2" ]; then
       say "Escape did not clear it -> kill+resume (lossless)..."
@@ -539,3 +567,4 @@ say ""
 say "flight: ALIVE | remote-control: $rc | pid: $(flightpid)"
 [ -n "$url" ] && say "app URL: $url"
 say "----- pane (tail) -----"; pane | tail -12
+exit 0   # reaching here == a completed run; don't leak the display pipe's exit status to systemd

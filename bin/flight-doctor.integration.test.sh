@@ -18,8 +18,16 @@ cat > "$S/tmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
   has-session) exit 0 ;;
-  capture-pane) if [ -n "${FIX_PANE_EXPANDED:-}" ] && grep -q ' C-o' "$ACTIONS" 2>/dev/null; then cat "$FIX_PANE_EXPANDED"; else cat "$FIX_PANE"; fi ;;
-  send-keys)  shift; echo "send-keys $*" >> "$ACTIONS" ;;
+  # Mimic real tmux: an "=NAME" exact-match prefix is INVALID as a PANE target
+  # (capture-pane / send-keys) and resolves to nothing -> empty / failure. This
+  # guards the lesson: re-introducing `-t "=$SESSION"` on pane ops silently blinds
+  # the watchdog, and the pane-scrape scenarios below would then fail.
+  capture-pane)
+    case "$*" in *"-t ="*) exit 0 ;; esac
+    if [ -n "${FIX_PANE_EXPANDED:-}" ] && grep -q ' C-o' "$ACTIONS" 2>/dev/null; then cat "$FIX_PANE_EXPANDED"; else cat "$FIX_PANE"; fi ;;
+  send-keys)
+    case "$*" in *"-t ="*) exit 1 ;; esac
+    shift; echo "send-keys $*" >> "$ACTIONS" ;;
   new-session|kill-session) echo "$1 $*" >> "$ACTIONS" ;;
 esac
 exit 0
@@ -34,6 +42,7 @@ cat > "$S/ps" <<'EOF'
 a="$*"
 case "$a" in
   *comm=*) echo "${FIX_COMM:-claude}" ;;
+  *args=*) echo "claude --remote-control flight --settings x" ;;   # for flightpid's label anchor
   *%cpu=*) echo "${FIX_CPU:-0.0}" ;;
   *--ppid*) [ -n "${FIX_KIDS:-}" ] && echo "$FIX_KIDS" ;;
 esac
@@ -71,6 +80,7 @@ run(){ # run NAME ; uses FIX_* from caller env; sets OUT + ACTIONS file
   ACTIONS="$TMP/actions.$1"; : > "$ACTIONS"; export ACTIONS
   local st="$TMP/state.$1"; rm -rf "$st"
   OUT="$(FLIGHT_CONF=/dev/null FLIGHT_STATE_DIR="$st" FLIGHT_SETTINGS=/nonexistent \
+        FLIGHT_RC_LABEL=flight FLIGHT_SESSION=flight \
         PATH="$S:$PATH" bash "$DOC" 2>&1)"
 }
 acted(){ grep -q "$1" "$ACTIONS" 2>/dev/null; }   # an action was recorded

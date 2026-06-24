@@ -46,6 +46,15 @@ jobs:
       - run: bin/flight-doctor.test.sh
       - run: bin/flight-doctor.integration.test.sh
 
+  # LIVE smoke test against REAL tmux (fake pane, no claude) -- catches
+  # tmux-target-semantics bugs the mocked suites miss (e.g. the "=NAME" pane bug).
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y tmux
+      - run: bin/flight-doctor.live.test.sh
+
   # Other glibc distros: should pass (GNU coreutils). Blocking.
   tests-distros:
     runs-on: ubuntu-latest

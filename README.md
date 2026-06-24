@@ -71,7 +71,7 @@ It's a dependency-light Bash script run every ~60s. Install by picking a
 `flight-doctor --selftest` reports health + TUI/upgrade drift:
 
 ```text
-flight-doctor --selftest [flight@host:user] (tested against Claude Code 2.1.190):
+flight-doctor --selftest [flight-host-user] (tested against Claude Code 2.1.190):
   [OK  ] tmux session 'flight' present
   [OK  ] claude pid 12890 (comm-filtered)
   [OK  ] resume-pin present
@@ -285,8 +285,17 @@ continues the same conversation. Remove the file for a fresh session.
 All site-specific values come from environment variables or the config file;
 the script's own defaults are generic so it is publishable as-is. See
 [`flight-doctor.conf.example`](flight-doctor.conf.example) for the full list.
-Key ones: `RC_NAME`, `FLIGHT_LAUNCHER`, `FLIGHT_NTFY_URL`, `FLIGHT_STALL_SECS`,
-`FLIGHT_FLAP_MAX`/`_WINDOW`, `FLIGHT_LOG_MAX_BYTES`/`_KEEP_LINES`.
+Key ones: `FLIGHT_SESSION`, `FLIGHT_RC_LABEL`/`FLIGHT_HOST`, `FLIGHT_LAUNCHER`,
+`FLIGHT_NTFY_URL`, `FLIGHT_STALL_SECS`, `FLIGHT_FLAP_MAX`/`_WINDOW`,
+`FLIGHT_LOG_MAX_BYTES`/`_KEEP_LINES`.
+
+**Naming.** The **tmux session name** (`FLIGHT_SESSION`, default `flight`) is
+deliberately *separate* from the **remote-control name** shown in the Claude Code
+web/desktop session list (`FLIGHT_RC_LABEL`, default
+`<session>-<host>-<user>`, e.g. `flight-web01-deploy`). The tmux name stays short
+for `tmux attach`; the RC name carries host+user so deployments on different boxes
+are distinguishable in the UI. Both the launcher and the watchdog derive them
+identically, so a single config override keeps them in sync.
 
 ## Hooks: structured signals (optional)
 
@@ -322,12 +331,25 @@ layer is enabled, active.
 ```sh
 bin/flight-doctor.test.sh              # unit suite (helpers, regexes, sentinels)
 bin/flight-doctor.integration.test.sh  # whole if-ladder vs canned pane fixtures
+bin/flight-doctor.live.test.sh         # LIVE smoke test vs REAL tmux (fake pane)
+FLIGHT_LIVE_CLAUDE=1 \
+  bin/flight-doctor.live-claude.test.sh  # opt-in: REAL handicapped claude (local only)
 ```
 
 The **integration** suite drives the entire decision if-ladder against stub
 `tmux`/`pgrep`/`ss`/`curl`/`claude` and recorded pane fixtures, asserting the
 DECISION (approve routine gate / hold mutation gate / hold auth / restart on RC
 drop / refuse restart on outage) -- the coverage the unit suite can't reach.
+
+Because mocked tmux can't model real **target semantics** (mocks once hid a bug
+where the exact-match form `-t "=NAME"` returns an *empty* pane for `capture-pane`
+and blinded the watchdog), two **live** tests exercise the real thing: the CI-safe
+one drives a **real tmux** session with a fake pane (no claude); the opt-in
+`live-claude` one spins a **real but handicapped** `claude --remote-control` in a
+throwaway dir (unique RC name, killed immediately) and asserts the watchdog detects
++ accepts its **real trust prompt**. It needs credentials, so it is local-only --
+never CI. Both stub-tmux suites also now model the `=NAME` rejection so the
+regression can't silently return.
 
 The unit suite sources the script in **library mode** (`FLIGHT_DOCTOR_LIB=1`) so only
 the pure helpers load, then exercises them with mocked `ss`/`curl`/`kill`/

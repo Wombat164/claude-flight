@@ -15,11 +15,23 @@ cd "$HOME" || exit 1
 # looks exactly like a dropped channel, burning restart cycles forever. Clear
 # them so RC uses the interactive (claude.ai) credential.
 unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY
-RC_NAME="${RC_NAME:-flight}"
+# Source the same site config the watchdog reads, so a FLIGHT_RC_LABEL / FLIGHT_HOST
+# override applies to BOTH the launcher and flight-doctor (they must agree on the
+# remote-control name). Set FLIGHT_CONF=/dev/null to skip.
+for _c in "${FLIGHT_CONF:-}" "$HOME/.config/flight-doctor.conf" "/etc/flight-doctor.conf"; do
+  # shellcheck source=/dev/null
+  [ -n "$_c" ] && [ -r "$_c" ] && { . "$_c"; break; }
+done
+SESSION="${FLIGHT_SESSION:-${RC_NAME:-flight}}"
+FLIGHT_HOST="${FLIGHT_HOST:-$(hostname -s 2>/dev/null || hostname)}"
+# The `claude --remote-control` name shown in the Claude Code web/desktop session
+# list (host/user-aware). MUST match flight-doctor's RC_LABEL. Override the whole
+# label with FLIGHT_RC_LABEL, or just the host component with FLIGHT_HOST.
+RC_LABEL="${FLIGHT_RC_LABEL:-${SESSION}-${FLIGHT_HOST}-$(id -un)}"
 # Optional: pin a session UUID to resume so respawns/heals continue the SAME
 # conversation instead of starting blank. Clear the file for a fresh session.
 RESUME_FILE="${FLIGHT_RESUME_FILE:-$HOME/.local/state/flight-resume}"
-echo "[flight-claude] persistent claude session (Remote Control: ${RC_NAME}). Ctrl-B d to detach (keeps it alive)."
+echo "[flight-claude] persistent claude session (Remote Control: ${RC_LABEL}). Ctrl-B d to detach (keeps it alive)."
 # Optional hook layer: when FLIGHT_SETTINGS points at a readable settings file
 # (see hooks/flight-hooks.json.example), pass it through so Claude Code emits
 # lifecycle sentinels for flight-doctor. Off unless set.
@@ -31,9 +43,9 @@ while true; do
   [ -f "$RESUME_FILE" ] && SID="$(head -n1 "$RESUME_FILE" 2>/dev/null | tr -d '[:space:]')"
   if [ -n "$SID" ]; then
     echo "[flight-claude] resuming session ${SID}"
-    claude --remote-control "$RC_NAME" "${SETTINGS_ARGS[@]}" --resume "$SID"
+    claude --remote-control "$RC_LABEL" "${SETTINGS_ARGS[@]}" --resume "$SID"
   else
-    claude --remote-control "$RC_NAME" "${SETTINGS_ARGS[@]}"
+    claude --remote-control "$RC_LABEL" "${SETTINGS_ARGS[@]}"
   fi
   rc=$?
   echo

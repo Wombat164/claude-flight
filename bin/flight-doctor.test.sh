@@ -112,11 +112,25 @@ yes grep -qiE "$MUTATION_RE" <<<"do ZZZFILE_TRIMMED thing"     # file pattern (w
 not grep -qiE "$MUTATION_RE" <<<"a comment line about things"  # '# ' line NOT added as a rule
 not grep -qiE "$MUTATION_RE" <<<"echo hello world"            # built-ins still don't over-match
 
-echo "== flightpid (comm-filtered, anti-mismatch) =="
-pgrep(){ printf '%s\n' 111 222; }      # two candidate pids match the cmdline
-ps(){ local pid="${*: -1}"; case "$pid" in 222) echo claude;; *) echo bash;; esac; }
-is "picks the claude pid, not the impostor" "$(flightpid)" "222"
-unset -f pgrep ps
+echo "== flightpid (comm-filtered + label-anchored) =="
+_rl="$RC_LABEL"; RC_LABEL="flight"
+# pgrep -f substring-matches, so RC_LABEL=flight also surfaces a flight-<host> pid.
+# 111 = comm impostor; 333 = a real claude with a LONGER label (must be rejected);
+# 222 = the exact-label claude (must be picked).
+pgrep(){ printf '%s\n' 111 333 222; }
+ps(){
+  local pid="${*: -1}"
+  case "$*" in
+    *comm=*) case "$pid" in 111) echo bash;; *) echo claude;; esac ;;
+    *args=*) case "$pid" in
+               222) echo "claude --remote-control flight --settings x" ;;
+               333) echo "claude --remote-control flight-web01-deploy --resume y" ;;
+               *)   echo "bash -c impostor" ;;
+             esac ;;
+  esac
+}
+is "comm-filtered + label-anchored (not impostor, not the longer-named session)" "$(flightpid)" "222"
+unset -f pgrep ps; RC_LABEL="$_rl"
 
 echo "== GATE_RE (approval menu cursor) =="
 yes grep -qE "$GATE_RE" <<<"  ❯ 1. Yes"
