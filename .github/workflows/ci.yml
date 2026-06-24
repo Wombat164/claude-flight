@@ -32,7 +32,9 @@ jobs:
         run: ci/leak-check.sh
       - name: gitleaks (entropy/secret scan over history)
         uses: gitleaks/gitleaks-action@v2
-        continue-on-error: true   # advisory; free for public repos
+        continue-on-error: true   # advisory; the hard gate is ci/leak-check.sh above
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # v2 requires this to scan PRs
 
   # Supported target: Linux + GNU coreutils. Blocking.
   tests:
