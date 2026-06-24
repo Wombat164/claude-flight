@@ -413,13 +413,14 @@ uses newer sub-commands such as `claude auth status --json`.)
 |---|---|
 | Linux, glibc + GNU coreutils (Debian / Ubuntu / Fedora / Arch) | ✅ supported, CI-tested |
 | Linux, musl / busybox (Alpine) | ✅ supported -- `apk add bash coreutils iproute2 util-linux procps`; CI-tested |
-| macOS | ⚠️ best-effort -- the `ss`->`lsof`, `flock`->mkdir-lock and BSD-`stat` shims are in and exercised on a **real macOS CI runner**; needs bash 4.4 + GNU coreutils (Homebrew). Not yet confirmed end-to-end against a real `claude` on a physical Mac |
+| macOS | ⚠️ best-effort -- the `ss`->`lsof`, `flock`->mkdir-lock and BSD-`stat` shims are validated on **real Apple silicon** (shim primitives on a physical M-series Mac + the full `macos.test.sh` and suites on a macOS CI runner); needs bash 4.4 + GNU coreutils (Homebrew). The one remaining gap is an end-to-end run with a real `claude` session |
 | Windows | ❌ not native -- run it inside **WSL** (= Linux). It is a server-side tmux watchdog, not a desktop app |
 
 This is a **Linux-first** tool -- it lives on an always-on host next to tmux.
 A *green CI job* for a platform means its **test suites** pass there (tmux / `ss` /
 `flock` are mocked); the status column above is about the **runtime**. macOS
-portability (lsof/flock/coreutils shims) is a tracked follow-up, not a flag.
+portability (lsof/flock/coreutils shims) is implemented and validated on real Apple
+silicon; the remaining gap is a full end-to-end run with a real claude session.
 
 ## License
 
