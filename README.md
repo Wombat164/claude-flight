@@ -412,12 +412,14 @@ uses newer sub-commands such as `claude auth status --json`.)
 | Platform | Status |
 |---|---|
 | Linux, glibc + GNU coreutils (Debian / Ubuntu / Fedora / Arch) | ✅ supported, CI-tested |
-| Linux, musl / busybox (Alpine) | ⚠️ best-effort -- install `bash coreutils iproute2 util-linux procps`; CI advisory |
-| macOS | ❌ not yet -- needs bash 4.4+ + GNU coreutils (Homebrew) and `ss`->`lsof` + `flock` shims; CI advisory |
+| Linux, musl / busybox (Alpine) | ✅ supported -- `apk add bash coreutils iproute2 util-linux procps`; CI-tested |
+| macOS | ❌ runtime not ready -- the **test suites** pass on CI, but a real run still needs `ss`->`lsof` + `flock` shims (plus bash 4.4 + GNU coreutils via Homebrew). Tracked |
 | Windows | ❌ not native -- run it inside **WSL** (= Linux). It is a server-side tmux watchdog, not a desktop app |
 
 This is a **Linux-first** tool -- it lives on an always-on host next to tmux.
-macOS portability (lsof/flock/coreutils shims) is a tracked follow-up, not a flag.
+A *green CI job* for a platform means its **test suites** pass there (tmux / `ss` /
+`flock` are mocked); the status column above is about the **runtime**. macOS
+portability (lsof/flock/coreutils shims) is a tracked follow-up, not a flag.
 
 ## License
 

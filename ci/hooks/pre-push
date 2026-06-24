@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# pre-push gate -- refuse to push if the secret/identity leak gate fails, so a
+# leaked credential or deployment-private identifier can never reach the
+# (eventually public) remote. Versioned so it survives clones; enable once per
+# clone with:   git config core.hooksPath ci/hooks
+set -uo pipefail
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+echo "[pre-push] running leak gate (ci/leak-check.sh)..."
+if ! "$root/ci/leak-check.sh"; then
+  echo "[pre-push] BLOCKED: leak-check found a secret / identity leak above."
+  echo "           Fix it, or -- if you are certain it is a false positive --"
+  echo "           re-run the push with --no-verify (you own that decision)."
+  exit 1
+fi
+echo "[pre-push] clean -- push allowed."
+exit 0

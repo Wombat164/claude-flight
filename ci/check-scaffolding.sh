@@ -16,7 +16,8 @@ req=(README.md LICENSE SECURITY.md .gitignore
      hooks/flight-notify.sh hooks/flight-hooks.json.example
      flight-doctor.conf.example flight-denylist.example
      systemd/flight-doctor.service systemd/flight-doctor.timer
-     assets/logo.svg .github/workflows/ci.yml)
+     assets/logo.svg .github/workflows/ci.yml
+     ci/hooks/pre-push CONTRIBUTING.md)
 for f in "${req[@]}"; do [ -f "$f" ] || fail "missing required file: $f"; done
 
 for f in bin/*.sh hooks/*.sh ci/*.sh; do
