@@ -22,5 +22,5 @@
   <text x="470" y="282" font-family="monospace" font-size="82" font-weight="bold" fill="#e6edf3">claude-flight</text>
   <text x="472" y="338" font-family="monospace" font-size="24" fill="#8b949e">keep a remote Claude Code session alive, self-heal it</text>
   <text x="472" y="388" font-family="monospace" font-size="22" fill="#d29922">a power tool with a real footgun -- read SECURITY.md</text>
-  <text x="472" y="436" font-family="monospace" font-size="21" fill="#3fb950">MIT  -  tested against Claude Code 2.1.187</text>
+  <text x="472" y="436" font-family="monospace" font-size="21" fill="#3fb950">MIT  -  tested against Claude Code 2.1.190</text>
 </svg>

@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="license: MIT">
   <img src="https://img.shields.io/badge/status-reference%20release-blue" alt="status: reference release">
-  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.187-informational" alt="tested against Claude Code 2.1.187">
+  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.190-informational" alt="tested against Claude Code 2.1.190">
 </p>
 
 > [!WARNING]
@@ -71,11 +71,11 @@ It's a dependency-light Bash script run every ~60s. Install by picking a
 `flight-doctor --selftest` reports health + TUI/upgrade drift:
 
 ```text
-flight-doctor --selftest (tested against Claude Code 2.1.187):
+flight-doctor --selftest [flight@host:user] (tested against Claude Code 2.1.190):
   [OK  ] tmux session 'flight' present
   [OK  ] claude pid 12890 (comm-filtered)
   [OK  ] resume-pin present
-  [OK  ] Claude Code 2.1.187 == tested
+  [OK  ] Claude Code 2.1.190 == tested
   [OK  ] detector regexes match known fixtures
   [OK  ] claude auth status: logged in
   [OK  ] hook layer active (session.alive present)
@@ -358,7 +358,7 @@ limits, and the preconditions you are accepting by running this unattended.
 
 ## Compatibility
 
-**Tested against Claude Code `2.1.187`.** The Claude Code *CLI version* is the
+**Tested against Claude Code `2.1.190`.** The Claude Code *CLI version* is the
 compatibility factor that matters: detection keys off the CLI's behavior and its
 (undocumented) TUI strings, so a future release can change them. Run a version at
 or above the tested one and re-validate after upgrades -- `flight-doctor --selftest`

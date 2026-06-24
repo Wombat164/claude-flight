@@ -32,6 +32,9 @@ for _c in "${FLIGHT_CONF:-}" "$HOME/.config/flight-doctor.conf" "/etc/flight-doc
   [ -n "$_c" ] && [ -r "$_c" ] && { . "$_c"; break; }
 done
 SESSION="${RC_NAME:-flight}"
+# Human-facing identity for alerts/status (NOT a tmux target): which box+user this
+# session runs as. Overridable; defaults to <session>@<short-host>:<user>.
+FLIGHT_ID="${FLIGHT_ID:-$SESSION@$(hostname -s 2>/dev/null || hostname):$(id -un)}"
 LAUNCHER="${FLIGHT_LAUNCHER:-$HOME/.local/bin/flight-claude.sh}"
 STALL_SECS="${FLIGHT_STALL_SECS:-180}"
 STATE_DIR="${FLIGHT_STATE_DIR:-$HOME/.local/state/flight}"
@@ -52,7 +55,7 @@ FLAP_WINDOW="${FLIGHT_FLAP_WINDOW:-1800}" # ...before the circuit breaker trips
 # bump this after re-validating on upgrade. The MODEL is irrelevant: the watchdog
 # operates below the model layer and never inspects which model the session runs.
 # shellcheck disable=SC2034  # consumed by the planned --selftest drift canary
-TESTED_CC_VERSION="2.1.187"
+TESTED_CC_VERSION="2.1.190"
 # CATASTROPHIC-ONLY hold-list (user policy: routine yes, catastrophic no).
 # Everything NOT matching here is auto-approved (builds, render, podman run,
 # sudo rm of /tmp, kubectl get/delete pod, file writes, etc). Only the
@@ -123,12 +126,12 @@ RO="${1:-}"
 HEALED=0
 
 say(){ printf '%s\n' "$*"; }
-pane(){ tmux capture-pane -t "$SESSION" -p 2>/dev/null; }
+pane(){ tmux capture-pane -t "=$SESSION" -p 2>/dev/null; }
 # Pane capture with wrapped lines JOINED (-J). A command wider than the pane
 # otherwise splits across rows and a dangerous token can straddle the wrap,
 # evading MUTATION_RE/AUTH_RE. Use this -- NOT pane() -- for any SECURITY match.
 # (Kept separate from pane() so the stall "frozen frame" diff is unaffected.)
-pane_j(){ tmux capture-pane -t "$SESSION" -p -J 2>/dev/null; }
+pane_j(){ tmux capture-pane -t "=$SESSION" -p -J 2>/dev/null; }
 # Wrap-joined pane with quotes stripped -- for the catastrophic match, so a
 # quoted target (rm -rf "/etc") cannot evade the denylist.
 pane_cmd(){ pane_j | tr -d "\"'"; }
@@ -266,7 +269,7 @@ kill_resume(){ # kill_resume [reason]
   # and pressing 1 would auto-approve it WITHOUT consulting the denylist. Anything
   # else is left for the next cycle's settle/hold logic (which runs MUTATION_RE).
   if grep -q "trust this folder" <<<"$(pane)"; then
-    tmux send-keys -t "$SESSION" '1' Enter
+    tmux send-keys -t "=$SESSION" '1' Enter
   fi
   sleep 8; HEALED=1
   logev INFO kill_resume "restart complete (newpid=$(flightpid))"
@@ -327,7 +330,7 @@ alert(){ # alert KEY PRIORITY TITLE BODY
   # is useless, whereas the out-of-band path still reaches the tmux session;
   # (2) the session URL is a bearer credential and the ntfy topic is shared/unauthed.
   local click=(); [ -n "${FLIGHT_ALERT_CLICK:-}" ] && click=(-H "Click: $FLIGHT_ALERT_CLICK")
-  if curl -sf --max-time 10 -H "Title: $title" -H "Priority: $prio" \
+  if curl -sf --max-time 10 -H "Title: [$FLIGHT_ID] $title" -H "Priority: $prio" \
        -H "Tags: airplane" "${click[@]}" -d "$body" "$ALERT_URL" >/dev/null 2>&1; then
     echo "$now" > "$cf" 2>/dev/null || true; logev INFO alert "ntfy sent key=$key prio=$prio"
   else
@@ -343,8 +346,8 @@ alert(){ # alert KEY PRIORITY TITLE BODY
 selftest(){
   local warn=0 crit=0
   chk(){ case "$1" in WARN) warn=1;; FAIL) crit=1;; esac; printf '  [%-4s] %s\n' "$1" "$2"; }
-  say "flight-doctor --selftest (tested against Claude Code $TESTED_CC_VERSION):"
-  tmux has-session -t "$SESSION" 2>/dev/null && chk OK "tmux session '$SESSION' present" || chk FAIL "tmux session '$SESSION' MISSING"
+  say "flight-doctor --selftest [$FLIGHT_ID] (tested against Claude Code $TESTED_CC_VERSION):"
+  tmux has-session -t "=$SESSION" 2>/dev/null && chk OK "tmux session '$SESSION' present" || chk FAIL "tmux session '$SESSION' MISSING"
   local P; P="$(flightpid)"
   [ -n "$P" ] && chk OK "claude pid $P (comm-filtered)" || chk WARN "no 'claude --remote-control $SESSION' pid"
   [ -s "$HOME/.local/state/flight-resume" ] && chk OK "resume-pin present" || chk WARN "resume-pin missing/empty (restarts not lossless)"
@@ -389,7 +392,7 @@ fi
 log_rotate
 
 # 1. Ensure the session exists.
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+if ! tmux has-session -t "=$SESSION" 2>/dev/null; then
   if [ "$RO" = "--status" ]; then say "flight: DOWN (no tmux session)"; exit 1; fi
   say "flight DOWN -> launching..."
   logev WARN relaunch "tmux session was down; launched via $LAUNCHER"
@@ -403,18 +406,18 @@ if [ "$RO" != "--status" ]; then
     p="$(pane)"
     if grep -q "trust this folder" <<<"$p"; then
       logev INFO trust "accepted trust-folder prompt"
-      say "trust prompt -> accepting"; tmux send-keys -t "$SESSION" '1' Enter; sleep 5; continue
+      say "trust prompt -> accepting"; tmux send-keys -t "=$SESSION" '1' Enter; sleep 5; continue
     fi
     if gate_confirmed "$p"; then
       # expand collapsed content first so the denylist sees the FULL command, then
       # re-evaluate against the expanded pane (pane_cmd re-captures live).
       if grep -qiE "$COLLAPSE_RE" <<<"$p"; then
         logev INFO gate_expand "collapsed content at gate -> Ctrl+O before deciding"
-        tmux send-keys -t "$SESSION" C-o; sleep 1
+        tmux send-keys -t "=$SESSION" C-o; sleep 1
       fi
       if grep -qiE "$MUTATION_RE" <<<"$(pane_cmd)"; then break; fi
       logev INFO gate_approve "routine permission gate approved (two-signal confirmed)"
-      say "routine gate (bash/edit/write) -> approving (this time)"; tmux send-keys -t "$SESSION" '1' Enter; sleep 3; continue
+      say "routine gate (bash/edit/write) -> approving (this time)"; tmux send-keys -t "=$SESSION" '1' Enter; sleep 3; continue
     fi
     break
   done
@@ -489,7 +492,7 @@ if [ -n "$el" ] && [ "$el" -ge "$STALL_SECS" ]; then
     if [ "$RO" = "--status" ]; then say "flight: STALLED spinner (${el}s) (run flight-doctor)"; exit 2; fi
     logev INFO stall_escape "spinner stalled ${el}s (tokens $tk1->$tk2) -> Escape"
     say "STALLED spinner (${el}s, no child, content+tokens frozen) -> sending Escape..."
-    tmux send-keys -t "$SESSION" Escape; sleep 5
+    tmux send-keys -t "=$SESSION" Escape; sleep 5
     el2="$(spinner_elapsed)"
     if [ -n "$el2" ] && [ "$el2" -ge "$STALL_SECS" ] && [ "$(content_sig)" = "$s2" ]; then
       say "Escape did not clear it -> kill+resume (lossless)..."

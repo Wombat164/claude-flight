@@ -56,7 +56,7 @@ cat > "$S/claude" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
   *"auth status"*) printf '{"loggedIn": %s}\n' "${FIX_AUTH:-true}"; [ "${FIX_AUTH:-true}" = true ] && exit 0 || exit 1 ;;
-  *--version*) echo "2.1.187 (Claude Code)" ;;
+  *--version*) echo "2.1.190 (Claude Code)" ;;
 esac
 exit 0
 EOF
