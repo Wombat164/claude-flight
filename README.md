@@ -401,8 +401,8 @@ uses newer sub-commands such as `claude auth status --json`.)
 - **bash >= 4.4** (arrays + `set -u`-safe empty-array expansion)
 - **tmux**, and the **`claude` CLI** with `--remote-control` support
 - **GNU coreutils** (`stat -c`, `date`, `du`, `timeout`) + **grep / sed / awk**
-- **iproute2** (`ss`) -- socket-truth RC-drop detection
-- **util-linux** (`flock`) -- single-instance guard
+- **iproute2** (`ss`) on Linux / **lsof** on macOS -- socket-truth RC-drop detection
+- **util-linux** (`flock`) on Linux / a mkdir-lock fallback on macOS -- single-instance guard
 - **procps** (`pgrep` / `ps`)
 - optional: **curl** (reachability probe + ntfy alerts), **jq** (hook receiver),
   **systemd** (any ~60s scheduler works -- cron/launchd too)
@@ -413,7 +413,7 @@ uses newer sub-commands such as `claude auth status --json`.)
 |---|---|
 | Linux, glibc + GNU coreutils (Debian / Ubuntu / Fedora / Arch) | ✅ supported, CI-tested |
 | Linux, musl / busybox (Alpine) | ✅ supported -- `apk add bash coreutils iproute2 util-linux procps`; CI-tested |
-| macOS | ❌ runtime not ready -- the **test suites** pass on CI, but a real run still needs `ss`->`lsof` + `flock` shims (plus bash 4.4 + GNU coreutils via Homebrew). Tracked |
+| macOS | ⚠️ best-effort -- the `ss`->`lsof`, `flock`->mkdir-lock and BSD-`stat` shims are in and exercised on a **real macOS CI runner**; needs bash 4.4 + GNU coreutils (Homebrew). Not yet confirmed end-to-end against a real `claude` on a physical Mac |
 | Windows | ❌ not native -- run it inside **WSL** (= Linux). It is a server-side tmux watchdog, not a desktop app |
 
 This is a **Linux-first** tool -- it lives on an always-on host next to tmux.

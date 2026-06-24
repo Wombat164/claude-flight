@@ -69,6 +69,12 @@ FLAP_WINDOW="${FLIGHT_FLAP_WINDOW:-1800}" # ...before the circuit breaker trips
 # operates below the model layer and never inspects which model the session runs.
 # shellcheck disable=SC2034  # consumed by the planned --selftest drift canary
 TESTED_CC_VERSION="2.1.190"
+# --- portability shims: Linux/GNU is the primary target; these keep macOS working
+# WITHOUT changing the Linux path (the GNU/ss/flock branch is identical to before,
+# so Linux behaviour cannot regress). ---
+case "$(uname -s 2>/dev/null)" in Darwin) IS_MAC=1 ;; *) IS_MAC=0 ;; esac
+# file mtime as epoch seconds: GNU `stat -c %Y`, BSD (macOS) `stat -f %m` fallback.
+_mtime(){ stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
 # CATASTROPHIC-ONLY hold-list (user policy: routine yes, catastrophic no).
 # Everything NOT matching here is auto-approved (builds, render, podman run,
 # sudo rm of /tmp, kubectl get/delete pod, file writes, etc). Only the
@@ -159,7 +165,8 @@ pane_cmd(){ pane_j | tr -d "\"'"; }
 flightpid(){
   local pid args
   for pid in $(pgrep -f "claude --remote-control $RC_LABEL" 2>/dev/null); do
-    [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "claude" ] || continue
+    # comm is "claude" on Linux, "node" / a full path on macOS -- accept either, reject shells.
+    case "$(basename "$(ps -o comm= -p "$pid" 2>/dev/null)" 2>/dev/null)" in claude|node) : ;; *) continue ;; esac
     # pgrep -f is a SUBSTRING match, so RC_LABEL=flight also matches a
     # flight-web01-deploy cmdline. Anchor to a COMPLETE token: the label must be
     # followed by a space (the next arg) or be the exact end of the command line.
@@ -194,7 +201,7 @@ kids_of(){ ps --ppid "$1" -o pid= 2>/dev/null | grep -c .; }
 # falls back to pane-scraping, so this is purely ADDITIVE.
 sentinel_fresh(){ # sentinel_fresh NAME MAXAGE_SECS  -> true if file exists & newer
   local f="$HOOK_DIR/$1"; [ -f "$f" ] || return 1
-  local now mt; now="$(date +%s)"; mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+  local now mt; now="$(date +%s)"; mt="$(_mtime "$f")"
   [ $(( now - ${mt:-0} )) -le "$2" ]
 }
 # Classify a fresh StopFailure sentinel: auth | outage | "" (none/stale). The
@@ -255,8 +262,14 @@ auth_ok(){
 rc_conns(){
   local P="${1:-$(flightpid)}"
   [ -z "$P" ] && { echo 0; return; }
-  ss -tnHp state established 2>/dev/null | grep -F "pid=$P," \
-    | grep -E ':443([^0-9]|$)' | grep -vc '127\.0\.0\.1'
+  if [ "$IS_MAC" = 1 ]; then
+    # macOS has no `ss`; lsof lists ESTABLISHED TCP conns for the pid -> count dest :443.
+    lsof -nP -p "$P" -iTCP -sTCP:ESTABLISHED 2>/dev/null \
+      | grep -E '\->.*:443([^0-9]|\)|$)' | grep -vc '127\.0\.0\.1'
+  else
+    ss -tnHp state established 2>/dev/null | grep -F "pid=$P," \
+      | grep -E ':443([^0-9]|$)' | grep -vc '127\.0\.0\.1'
+  fi
 }
 # Lossless restart: re-exec claude via the resume-pin (same conversation, fresh
 # RC channel + URL). Guarded by an outage probe so we never thrash when Anthropic
@@ -413,8 +426,20 @@ if [ "$RO" = "--selftest" ]; then selftest; exit $?; fi
 # --status is read-only and safe to run concurrently, so it skips the lock.
 if [ "$RO" != "--status" ]; then
   mkdir -p "$STATE_DIR" 2>/dev/null || true
-  exec 9>"$STATE_DIR/doctor.lock"
-  if ! flock -n 9; then say "another flight-doctor is running -> skipping this run"; exit 0; fi
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$STATE_DIR/doctor.lock"
+    flock -n 9 || { say "another flight-doctor is running -> skipping this run"; exit 0; }
+  else
+    # macOS / no flock: atomic mkdir lock with stale-lock reclaim (a crashed run
+    # leaves the dir; reclaim it after 5 min so the watchdog never wedges itself).
+    _ld="$STATE_DIR/doctor.lock.d"
+    if ! mkdir "$_ld" 2>/dev/null; then
+      if [ "$(( $(date +%s) - $(_mtime "$_ld") ))" -gt 300 ]; then
+        rmdir "$_ld" 2>/dev/null; mkdir "$_ld" 2>/dev/null || { say "lock contended -> skipping"; exit 0; }
+      else say "another flight-doctor is running -> skipping this run"; exit 0; fi
+    fi
+    trap 'rmdir "$STATE_DIR/doctor.lock.d" 2>/dev/null' EXIT
+  fi
 fi
 
 log_rotate

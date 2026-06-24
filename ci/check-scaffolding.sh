@@ -13,6 +13,7 @@ req=(README.md LICENSE SECURITY.md .gitignore
      bin/flight-doctor.sh bin/flight-claude.sh
      bin/flight-doctor.test.sh bin/flight-doctor.integration.test.sh
      bin/flight-doctor.live.test.sh bin/flight-doctor.live-claude.test.sh
+     bin/flight-doctor.macos.test.sh
      hooks/flight-notify.sh hooks/flight-hooks.json.example
      flight-doctor.conf.example flight-denylist.example
      systemd/flight-doctor.service systemd/flight-doctor.timer

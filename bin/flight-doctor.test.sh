@@ -34,6 +34,7 @@ source "$HERE/flight-doctor.sh"
 RO=""   # active (not --status) for most tests
 
 echo "== rc_conns (socket parsing) =="
+IS_MAC=0                            # force the Linux/ss path so this is deterministic on a macOS runner
 ss(){ printf '%s\n' "$SS_OUT"; }   # mock: ignore args, emit canned table
 SS_OUT='ESTAB 0 0 192.0.2.10:43310 198.51.100.20:443 users:(("claude",pid=4242,fd=17))
 ESTAB 0 0 192.0.2.10:36802 198.51.100.20:443 users:(("claude",pid=4242,fd=44))
