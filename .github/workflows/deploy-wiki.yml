@@ -1,0 +1,84 @@
+# Deploy the claude-flight docs site (Quartz v4) to GitHub Pages.
+#
+# Follows the official Quartz v4 GitHub Pages recipe for action versions,
+# permissions, concurrency, node version and the upload -> deploy handoff:
+#   https://github.com/jackyzha0/quartz/blob/v4/docs/hosting.md
+#
+# One deliberate difference: Quartz itself is NOT vendored in this repo (see
+# wiki/README.md). This workflow fetches Quartz v4 at a pinned commit, overlays
+# wiki/quartz.config.ts + wiki/quartz.layout.ts + wiki/content/, then builds.
+#
+# PREREQUISITE: Settings > Pages > Source = "GitHub Actions".
+
+name: Deploy wiki to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["wiki/**", ".github/workflows/deploy-wiki.yml"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout this repo (config + content)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so CreatedModifiedDate can use git dates
+
+      - name: Fetch Quartz v4 framework (pinned commit)
+        run: |
+          set -euo pipefail
+          QUARTZ_SHA=d25a6eabf96751ffca56f8a8139272def7a65041  # v4 @ 2026-04-20
+          git init .quartz-build
+          git -C .quartz-build remote add origin https://github.com/jackyzha0/quartz.git
+          git -C .quartz-build fetch --depth 1 origin "$QUARTZ_SHA"
+          git -C .quartz-build checkout "$QUARTZ_SHA"
+
+      - name: Overlay our config + content into Quartz
+        run: |
+          set -euo pipefail
+          cp wiki/quartz.config.ts .quartz-build/quartz.config.ts
+          cp wiki/quartz.layout.ts .quartz-build/quartz.layout.ts
+          rm -rf .quartz-build/content
+          cp -r wiki/content .quartz-build/content
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: .quartz-build
+        run: npm ci
+
+      - name: Build Quartz
+        working-directory: .quartz-build
+        run: npx quartz build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .quartz-build/public
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
