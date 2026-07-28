@@ -12,9 +12,21 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="license: MIT">
-  <img src="https://img.shields.io/badge/status-reference%20release-blue" alt="status: reference release">
-  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.190-informational" alt="tested against Claude Code 2.1.190">
+  <a href="https://github.com/Wombat164/claude-flight/actions/workflows/ci.yml"><img src="https://github.com/Wombat164/claude-flight/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Wombat164/claude-flight/releases/latest"><img src="https://img.shields.io/github/v/release/Wombat164/claude-flight" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Wombat164/claude-flight" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.220-informational" alt="tested against Claude Code 2.1.220">
+  <img src="https://img.shields.io/badge/shell-bash-lightgrey" alt="bash">
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
+  <a href="#install">Install</a> &middot;
+  <a href="#configuration">Configuration</a> &middot;
+  <a href="https://wombat164.github.io/claude-flight/">Docs site</a> &middot;
+  <a href="SECURITY.md">Security</a> &middot;
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 > [!WARNING]
@@ -71,11 +83,11 @@ It's a dependency-light Bash script run every ~60s. Install by picking a
 `flight-doctor --selftest` reports health + TUI/upgrade drift:
 
 ```text
-flight-doctor --selftest [flight-host-user] (tested against Claude Code 2.1.190):
+flight-doctor --selftest [flight-host-user] (tested against Claude Code 2.1.220):
   [OK  ] tmux session 'flight' present
   [OK  ] claude pid 12890 (comm-filtered)
   [OK  ] resume-pin present
-  [OK  ] Claude Code 2.1.190 == tested
+  [OK  ] Claude Code 2.1.220 == tested
   [OK  ] detector regexes match known fixtures
   [OK  ] claude auth status: logged in
   [OK  ] hook layer active (session.alive present)
@@ -397,7 +409,7 @@ limits, and the preconditions you are accepting by running this unattended.
 
 ## Compatibility
 
-**Tested against Claude Code `2.1.190`.** The Claude Code *CLI version* is the
+**Tested against Claude Code `2.1.220`.** The Claude Code *CLI version* is the
 compatibility factor that matters: detection keys off the CLI's behavior and its
 (undocumented) TUI strings, so a future release can change them. Run a version at
 or above the tested one and re-validate after upgrades -- `flight-doctor --selftest`
@@ -439,9 +451,6 @@ A *green CI job* for a platform means its **test suites** pass there (tmux / `ss
 portability (lsof/flock/coreutils shims) is implemented and validated on real Apple
 silicon; the remaining gap is a full end-to-end run with a real claude session.
 
-## License
-
-MIT -- see [LICENSE](LICENSE).
 
 ## License
 
