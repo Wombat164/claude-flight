@@ -34,6 +34,12 @@
 #   FLIGHT_RESUME_FILE                       resume-pin path (shared with the launcher)
 set -uo pipefail
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+# The native installer puts `claude` in ~/.local/bin, which the systemd --user
+# manager does NOT have on PATH. Without this, every `command -v claude` here
+# misses under the timer -- and auth_ok() fails OPEN, so the auth-hold and the
+# auth-aware crash-loop branch silently never fire. That is precisely the failure
+# that masked an expired credential for days. Same hardening as the launcher.
+case ":$PATH:" in *":$HOME/.local/bin:"*) : ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 # Source an optional site config before applying defaults (first readable wins).
 # Set FLIGHT_CONF=/dev/null to skip it (the test harness does this).
 for _c in "${FLIGHT_CONF:-}" "$HOME/.config/flight-doctor.conf" "/etc/flight-doctor.conf"; do
