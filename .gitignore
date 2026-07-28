@@ -7,3 +7,6 @@ state/
 *.log
 *.heartbeat
 *.lock
+
+# Quartz build scratch (framework is fetched, not vendored -- see wiki/README.md)
+.quartz-build/
