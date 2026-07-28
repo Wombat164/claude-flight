@@ -13,10 +13,10 @@
 
 <p align="center">
   <a href="https://github.com/Wombat164/claude-flight/actions/workflows/ci.yml"><img src="https://github.com/Wombat164/claude-flight/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Wombat164/claude-flight/releases/latest"><img src="https://img.shields.io/github/v/release/Wombat164/claude-flight" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Wombat164/claude-flight" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.220-informational" alt="tested against Claude Code 2.1.220">
-  <img src="https://img.shields.io/badge/shell-bash-lightgrey" alt="bash">
+  <a href="https://github.com/Wombat164/claude-flight/releases/latest"><img src="https://img.shields.io/github/v/release/Wombat164/claude-flight?color=00E5A0" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Wombat164/claude-flight?color=00E5A0" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/tested-Claude%20Code%202.1.220-7C8899" alt="tested against Claude Code 2.1.220">
+  <img src="https://img.shields.io/badge/read-SECURITY.md-FFB000" alt="read SECURITY.md">
 </p>
 
 <p align="center">

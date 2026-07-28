@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 96" width="520" height="96" role="img" aria-label="claude-flight">
+  <title>claude-flight</title>
+  <desc>Horizontal lockup: the attitude-indicator mark beside the wordmark.</desc>
+  <defs>
+    <clipPath id="dial3"><circle cx="32" cy="32" r="23"/></clipPath>
+    <linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12283F"/>
+      <stop offset="1" stop-color="#1B3A5C"/>
+    </linearGradient>
+    <linearGradient id="ground3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6B4A2A"/>
+      <stop offset="1" stop-color="#4A3320"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(4 8) scale(1.25)">
+    <circle cx="32" cy="32" r="29" fill="#0A0E14"/>
+    <g clip-path="url(#dial3)">
+      <rect x="9" y="9"  width="46" height="23" fill="url(#sky3)"/>
+      <rect x="9" y="32" width="46" height="23" fill="url(#ground3)"/>
+      <g stroke="#E8E6E3" stroke-opacity="0.35" stroke-width="1.4" stroke-linecap="round">
+        <line x1="26" y1="22.5" x2="38" y2="22.5"/>
+        <line x1="28.5" y1="41.5" x2="35.5" y2="41.5"/>
+      </g>
+    </g>
+    <line x1="9" y1="32" x2="55" y2="32" stroke="#00E5A0" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="32" cy="32" r="23" fill="none" stroke="#7C8899" stroke-width="3"/>
+    <path d="M32 6.6 L29.6 10.4 L34.4 10.4 Z" fill="#7C8899"/>
+    <path d="M26 24.8 L39.5 32 L26 39.2 Z" fill="#FFB000" stroke="#0A0E14" stroke-width="1.4" stroke-linejoin="round"/>
+  </g>
+
+  <text x="106" y="52" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="42" font-weight="bold" fill="currentColor">claude<tspan fill="#00E5A0">-</tspan>flight</text>
+  <text x="108" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7C8899">keep it level, keep it alive</text>
+</svg>

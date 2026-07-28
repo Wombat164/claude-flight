@@ -45,3 +45,9 @@ CI runs lint (shellcheck), the leak + scaffolding gates, the unit/integration/li
 suites across Ubuntu/Debian/Fedora (Alpine + macOS best-effort). Keep it green.
 
 Shell style: `shellcheck --severity=warning` clean, `set -uo pipefail`, ASCII only.
+
+## Brand and assets
+
+The visual identity (the attitude-indicator mark, the "night cockpit" palette,
+and where each asset is used) is documented in [assets/BRAND.md](assets/BRAND.md).
+Changes to `assets/*.svg` or the docs-site theme should stay inside that palette.
