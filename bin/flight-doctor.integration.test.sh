@@ -17,7 +17,14 @@ S="$TMP/stubs"; mkdir -p "$S"
 cat > "$S/tmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
-  has-session) exit 0 ;;
+  # FIX_NOSESSION=1 -> session absent until a new-session was recorded (cold
+  # start); FIX_LAUNCH_DIES=1 -> absent even after launch (crash-loop signature).
+  has-session)
+    if [ -n "${FIX_NOSESSION:-}" ]; then
+      [ -n "${FIX_LAUNCH_DIES:-}" ] && exit 1
+      [ -f "$ACTIONS.launched" ] || exit 1
+    fi
+    exit 0 ;;
   # Mimic real tmux: an "=NAME" exact-match prefix is INVALID as a PANE target
   # (capture-pane / send-keys) and resolves to nothing -> empty / failure. This
   # guards the lesson: re-introducing `-t "=$SESSION"` on pane ops silently blinds
@@ -28,9 +35,19 @@ case "$1" in
   send-keys)
     case "$*" in *"-t ="*) exit 1 ;; esac
     shift; echo "send-keys $*" >> "$ACTIONS" ;;
-  new-session|kill-session) echo "$1 $*" >> "$ACTIONS" ;;
+  new-session) echo "$1 $*" >> "$ACTIONS"; : > "$ACTIONS.launched" ;;
+  kill-session) echo "$1 $*" >> "$ACTIONS" ;;
 esac
 exit 0
+EOF
+# systemd-run stub: record the scope launch, then exec the wrapped command so
+# the tmux stub still records the new-session.
+cat > "$S/systemd-run" <<'EOF'
+#!/usr/bin/env bash
+echo "systemd-run $*" >> "$ACTIONS"
+while [ $# -gt 0 ] && [ "$1" != "--" ]; do shift; done
+[ "${1:-}" = "--" ] && shift
+exec "$@"
 EOF
 cat > "$S/pgrep" <<'EOF'
 #!/usr/bin/env bash
@@ -79,7 +96,10 @@ kill(){ echo "kill $*" >> "$ACTIONS"; }; export -f kill
 run(){ # run NAME ; uses FIX_* from caller env; sets OUT + ACTIONS file
   ACTIONS="$TMP/actions.$1"; : > "$ACTIONS"; export ACTIONS
   local st="$TMP/state.$1"; rm -rf "$st"
+  # optional pre-seeded state (breaker files, boot_id) prepared in $TMP/seed.NAME
+  [ -d "$TMP/seed.$1" ] && cp -r "$TMP/seed.$1" "$st"
   OUT="$(FLIGHT_CONF=/dev/null FLIGHT_STATE_DIR="$st" FLIGHT_SETTINGS=/nonexistent \
+        FLIGHT_RESUME_FILE="$st/resume-pin" \
         FLIGHT_RC_LABEL=flight FLIGHT_SESSION=flight IS_MAC=0 \
         PATH="$S:$PATH" bash "$DOC" 2>&1)"
 }
@@ -128,6 +148,46 @@ acted '1 Enter' && ok "collapsed+benign -> approved after expand" || no "collaps
 FIX_PANE="$P_COL" FIX_PANE_EXPANDED="$P_COL_BAD" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=true run colbad
 acted ' C-o' && ok "collapsed gate -> Ctrl+O sent (bad)" || no "collapsed bad -> not expanded"
 acted '1 Enter' && no "collapsed-hidden rm -rf -> MUST NOT approve" || ok "collapsed-hidden rm -rf -> HELD (denylist saw it after expand)"
+
+# cold relaunch: session missing -> launch must detach the tmux server into its
+# own scope (the 2026-07 cgroup-reap loop), then the run continues to ALIVE.
+FIX_NOSESSION=1 FIX_LAUNCH_DIES='' FLIGHT_SCOPE_LAUNCH=1 FIX_PANE="$P_IDLE" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=true run relaunch
+acted 'systemd-run --user --scope' && ok "cold relaunch -> server detached via systemd-run scope" || no "cold relaunch -> scope launch missing"
+acted 'new-session' && ok "cold relaunch -> session launched" || no "cold relaunch -> no launch"
+grep -q 'flight DOWN' <<<"$OUT" && ok "cold relaunch -> DOWN reported" || no "cold relaunch -> DOWN not reported"
+grep -q 'flight: ALIVE' <<<"$OUT" && ok "cold relaunch -> continues to ALIVE" || no "cold relaunch -> no ALIVE report"
+unset FLIGHT_SCOPE_LAUNCH
+
+# relaunched session dies within seconds -> reported, not silently ignored
+FIX_NOSESSION=1 FIX_LAUNCH_DIES=1 FIX_PANE="$P_IDLE" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=true run relaunchdied
+grep -q 'ALREADY GONE' <<<"$OUT" && ok "launch died -> reported immediately" || no "launch died -> not reported"
+
+# relaunch circuit breaker: FLAP_MAX recent relaunches on record + still down
+# -> suppress further relaunching and escalate (the anti-"week of ntfy drip")
+mkdir -p "$TMP/seed.reflap"; { date +%s; date +%s; date +%s; } > "$TMP/seed.reflap/relaunches"
+FIX_NOSESSION=1 FIX_LAUNCH_DIES=1 FIX_PANE="$P_IDLE" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=true run reflap
+acted 'new-session' && no "relaunch loop -> MUST NOT relaunch again" || ok "relaunch loop -> relaunch suppressed"
+grep -q 'RELAUNCH LOOP' <<<"$OUT" && ok "relaunch loop -> escalated for a human" || no "relaunch loop -> not escalated"
+unset FIX_NOSESSION FIX_LAUNCH_DIES
+
+# inner-claude crash loop: wrapper exit banners piling up in the pane + expired
+# login -> surfaced as needs-/login, never kill+resume (wrapper already respawns)
+P_CRASH="$TMP/p_crash"; printf '%s\n' \
+  "[flight-claude] claude exited rc=1 -- respawning in 3s (Ctrl-C now for a shell)" \
+  "[flight-claude] persistent claude session (Remote Control: flight)." \
+  "[flight-claude] claude exited rc=1 -- respawning in 3s (Ctrl-C now for a shell)" > "$P_CRASH"
+FIX_PANE="$P_CRASH" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=false run crashloop
+acted 'kill ' && no "crash loop -> MUST NOT kill+resume" || ok "crash loop -> no kill+resume"
+grep -q 'CRASH-LOOPING' <<<"$OUT" && ok "crash loop -> surfaced loudly" || no "crash loop -> not surfaced"
+
+# host reboot (Linux only): stored boot_id differs -> logged + breaker budgets reset
+if [ -r /proc/sys/kernel/random/boot_id ]; then
+  mkdir -p "$TMP/seed.reboot"; echo "not-the-current-boot-id" > "$TMP/seed.reboot/boot_id"
+  date +%s > "$TMP/seed.reboot/relaunches"
+  FIX_PANE="$P_IDLE" FIX_SS="$SS2" FIX_CURL=200 FIX_AUTH=true run reboot
+  grep -q ' reboot ' "$TMP/state.reboot/flight-doctor.log" 2>/dev/null && ok "reboot -> boot_id change logged" || no "reboot -> not logged"
+  [ -f "$TMP/state.reboot/relaunches" ] && no "reboot -> relaunch budget MUST be reset" || ok "reboot -> relaunch budget reset"
+fi
 
 echo
 echo "==================================================="

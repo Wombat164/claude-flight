@@ -26,6 +26,14 @@
 # FLIGHT_FLAP_WINDOW=1800           # ...before the circuit breaker trips
 # FLIGHT_LOG_MAX_BYTES=262144       # event-log rotation threshold
 # FLIGHT_LOG_KEEP_LINES=2000        # lines retained after a rotation
+# FLIGHT_ESCALATION_COOLDOWN_SECS=21600   # breaker escalations repeat at most 6-hourly
+# FLIGHT_CRASHLOOP_YOUNG_SECS=90    # inner process must be this young to count as looping
+# FLIGHT_RESUME_FILE="$HOME/.local/state/flight-resume"   # resume-pin (shared with the launcher)
+# FLIGHT_SCOPE_LAUNCH=auto          # auto|1|0 -- relaunch via `systemd-run --user --scope`.
+#                      Under a oneshot service the default KillMode=control-group reaps a
+#                      tmux server born in that cgroup, so a cold relaunch dies seconds
+#                      later and loops forever. `auto` detects systemd via INVOCATION_ID
+#                      and detaches; set 0 only if you launch the watchdog some other way.
 # FLIGHT_ALERT_CLICK   one-tap deep-link for critical alerts (ntfy Click action).
 #                      Point at an AUTH-GATED OUT-OF-BAND terminal (Teleport/ttyd/
 #                      Cockpit), NOT the claude.ai session URL: alerts often fire

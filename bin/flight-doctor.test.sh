@@ -249,6 +249,62 @@ not gate_confirmed "  the docs say: ❯ 1. Yes, always do it"
 date -u +%FT%TZ > "$HOOK_DIR/gate.pending"; yes gate_confirmed "no gate glyph here at all"
 rm -f "$HOOK_DIR/gate.pending"
 
+echo "== launch_detached (cgroup-escape relaunch) =="
+# Under systemd (INVOCATION_ID set) the tmux server MUST be detached into its
+# own scope; interactively a plain launch is fine (login-session scope persists).
+tmux(){ echo "tmux $*" >>"$TMP/launch.log"; }
+systemd-run(){ echo "systemd-run $*" >>"$TMP/launch.log"; }
+rm -f "$TMP/launch.log"; INVOCATION_ID="unit-test" FLIGHT_SCOPE_LAUNCH=auto launch_detached
+yes grep -q '^systemd-run --user --scope' "$TMP/launch.log"
+not grep -q '^tmux new-session' "$TMP/launch.log"
+rm -f "$TMP/launch.log"; unset INVOCATION_ID; FLIGHT_SCOPE_LAUNCH=auto launch_detached
+yes grep -q '^tmux new-session' "$TMP/launch.log"      # interactive -> plain tmux
+not grep -q '^systemd-run' "$TMP/launch.log"
+rm -f "$TMP/launch.log"; INVOCATION_ID="unit-test" FLIGHT_SCOPE_LAUNCH=0 launch_detached
+yes grep -q '^tmux new-session' "$TMP/launch.log"      # forced off -> plain tmux
+rm -f "$TMP/launch.log"; unset INVOCATION_ID
+systemd-run(){ echo "systemd-run $*" >>"$TMP/launch.log"; return 1; }
+FLIGHT_SCOPE_LAUNCH=1 launch_detached
+yes grep -q '^tmux new-session' "$TMP/launch.log"      # scope failure -> fallback launch
+unset -f systemd-run tmux; unset FLIGHT_SCOPE_LAUNCH
+
+echo "== claude_young_or_absent (crash-loop corroboration) =="
+# The wrapper's exit banner is ordinary pane text, so the banner count alone
+# cannot distinguish a live respawn loop from someone reading the launcher
+# source inside the session. A real loop shows in the process too.
+flightpid(){ printf '%s' "${_FP:-}"; }
+ps(){ case "$*" in *etimes*) printf '%s\n' "${_AGE:-}" ;; esac; }
+_FP=""   _AGE="";      yes claude_young_or_absent   # claude gone -> loop is plausible
+_FP=4242 _AGE=5;       yes claude_young_or_absent   # just (re)started -> loop is plausible
+_FP=4242 _AGE=86400;   not claude_young_or_absent   # long-lived -> banners are just text
+_FP=4242 _AGE="";      yes claude_young_or_absent   # no etimes (BSD ps) -> fail open
+unset -f flightpid ps; unset _FP _AGE
+
+echo "== maybe_repin (resume-pin self-heal from hook sentinel) =="
+RO=""; _rf_save="$RESUME_FILE"; RESUME_FILE="$TMP/pin"
+mkdir -p "$HOOK_DIR"
+printf '%s\n' "2026-01-01T00:00:00Z sid=00000000-1111-2222-3333-444444444444" > "$HOOK_DIR/session.alive"
+rm -f "$RESUME_FILE"; maybe_repin
+is "adopts live sid when pin missing" "$(cat "$RESUME_FILE" 2>/dev/null)" "00000000-1111-2222-3333-444444444444"
+printf '%s\n' "operator-chosen-uuid" > "$RESUME_FILE"; maybe_repin
+is "never overwrites an existing pin" "$(cat "$RESUME_FILE")" "operator-chosen-uuid"
+rm -f "$RESUME_FILE" "$HOOK_DIR/session.alive"; maybe_repin
+is "no sentinel -> no pin written" "$([ -e "$RESUME_FILE" ] && echo y || echo n)" "n"
+RO="--status"; printf '%s\n' "ts sid=abcdef00-0000-0000-0000-000000000000" > "$HOOK_DIR/session.alive"; maybe_repin
+is "--status never writes the pin" "$([ -e "$RESUME_FILE" ] && echo y || echo n)" "n"
+RO=""; rm -f "$HOOK_DIR/session.alive"; RESUME_FILE="$_rf_save"
+
+echo "== alert per-call cooldown (breaker escalations alert rarely) =="
+curl(){ echo "ARGS $*" >>"$TMP/curl.log"; return 0; }   # `date` is already stubbed above (NOW-driven)
+ALERT_URL="https://ntfy.sh/unit-test-topic"; RO=""; FLIGHT_ALERT=1; ALERT_COOLDOWN_SECS=1800
+rm -f "$TMP/curl.log" "$FLIGHT_STATE_DIR"/alert.*; NOW=50000
+alert esc high "t" "b" 7200
+is "escalation alert sent"            "$(wc -l <"$TMP/curl.log")" "1"
+NOW=$((50000+3000)); alert esc high "t" "b" 7200   # past default cooldown, within custom
+is "suppressed by per-call cooldown"  "$(wc -l <"$TMP/curl.log")" "1"
+NOW=$((50000+8000)); alert esc high "t" "b" 7200
+is "sent after per-call cooldown"     "$(wc -l <"$TMP/curl.log")" "2"
+
 echo
 echo "==================================================="
 printf 'RESULT: %d passed, %d failed\n' "$PASS" "$FAIL"

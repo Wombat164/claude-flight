@@ -26,6 +26,12 @@
 #   FLIGHT_HEARTBEAT_SECS  (default 3600)    min gap between "all healthy" lines
 #   FLIGHT_ALERT_COOLDOWN_SECS (default 1800) per-key alert rate limit
 #   FLIGHT_FLAP_MAX / _WINDOW  (3 / 1800)    restart-loop circuit breaker
+#                                            (also caps RELAUNCHES of a dying session)
+#   FLIGHT_ESCALATION_COOLDOWN_SECS (21600)  alert cooldown for breaker escalations
+#   FLIGHT_SCOPE_LAUNCH  (auto|1|0)          relaunch via systemd-run --scope so the
+#                                            tmux server survives this service run
+#                                            (auto = only when run by systemd)
+#   FLIGHT_RESUME_FILE                       resume-pin path (shared with the launcher)
 set -uo pipefail
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 # Source an optional site config before applying defaults (first readable wins).
@@ -63,12 +69,21 @@ ALERT_URL="${FLIGHT_NTFY_URL:-${NTFY_URL:-}}"
 ALERT_COOLDOWN_SECS="${FLIGHT_ALERT_COOLDOWN_SECS:-1800}"
 FLAP_MAX="${FLIGHT_FLAP_MAX:-3}"          # max kill+resumes within the window...
 FLAP_WINDOW="${FLIGHT_FLAP_WINDOW:-1800}" # ...before the circuit breaker trips
+# Breaker-escalation alerts repeat far less often than routine alerts: once the
+# breaker holds, every subsequent run hits it, and a 30-min cooldown would still
+# drip ~48 alerts/day for days (lived experience). Default 6h.
+ESCALATION_COOLDOWN_SECS="${FLIGHT_ESCALATION_COOLDOWN_SECS:-21600}"
+# Crash-loop corroboration: how young the inner claude must be for a pane full of
+# wrapper exit banners to count as a live loop rather than text on screen.
+CRASHLOOP_YOUNG_SECS="${FLIGHT_CRASHLOOP_YOUNG_SECS:-90}"
+# Resume-pin path -- shared contract with flight-claude.sh (launcher reads it).
+RESUME_FILE="${FLIGHT_RESUME_FILE:-$HOME/.local/state/flight-resume}"
 # Claude Code CLI version this was last validated against. Detection keys off the
 # CLI's behavior + (undocumented) TUI strings, so a release can change them --
 # bump this after re-validating on upgrade. The MODEL is irrelevant: the watchdog
 # operates below the model layer and never inspects which model the session runs.
 # shellcheck disable=SC2034  # consumed by the planned --selftest drift canary
-TESTED_CC_VERSION="2.1.190"
+TESTED_CC_VERSION="2.1.220"   # re-validated 2026-07-28: trust prompt + RC registration observed live; gate/spinner fixtures unchanged
 # --- portability shims: Linux/GNU is the primary target; these keep macOS working
 # WITHOUT changing the Linux path (the GNU/ss/flock branch is identical to before,
 # so Linux behaviour cannot regress). ---
@@ -192,6 +207,19 @@ spinner_elapsed(){
 # pane with the animated spinner line + bottom hint stripped -> the real content
 content_sig(){ pane | grep -vE "$SPIN_RE|esc to interrupt"; }
 kids_of(){ ps --ppid "$1" -o pid= 2>/dev/null | grep -c .; }
+# Second signal for the crash-loop detector. The wrapper's exit banner is plain
+# pane text, so ANY view of the launcher source (this repo gets developed inside
+# a flight session) puts it on screen and would false-fire a "/login needed"
+# alert. A real loop also shows structurally: claude is either gone or was just
+# (re)started. Fail open when the age is unavailable (BSD ps has no `etimes`) so
+# a platform without it behaves as before.
+claude_young_or_absent(){
+  local P age
+  P="$(flightpid)"; [ -n "$P" ] || return 0
+  age="$(ps -o etimes= -p "$P" 2>/dev/null | tr -cd '0-9')"
+  [ -n "$age" ] || return 0
+  [ "$age" -lt "$CRASHLOOP_YOUNG_SECS" ]
+}
 
 # Is the Anthropic API reachable at all? Any HTTP status (even 401/405) proves
 # reachability; only a timeout / connection failure (code 000) means an outage
@@ -317,6 +345,49 @@ kill_resume(){ # kill_resume [reason]
   logev INFO kill_resume "restart complete (newpid=$(flightpid))"
 }
 
+# Launch the tmux session so it OUTLIVES this run. Under a systemd service (the
+# ~60s timer) a tmux SERVER born here is a child of the service's cgroup: with
+# the default KillMode=control-group, systemd reaps it the moment the run
+# finishes (~12s in) -- the relaunch never survives, and the doctor relaunches
+# forever. Seen live 2026-07: a host reboot killed the long-lived server and
+# every timer relaunch died young for DAYS (one ntfy per cooldown). The fix:
+# detach the server into its own transient scope under the user manager via
+# systemd-run, out of this service's cgroup. Interactive/manual runs are safe
+# either way (the server joins the login-session scope, which persists), so
+# `auto` only engages the scope launch when systemd invoked us (INVOCATION_ID).
+launch_detached(){
+  local mode="${FLIGHT_SCOPE_LAUNCH:-auto}" use=0
+  case "$mode" in
+    1) use=1 ;;
+    0) use=0 ;;
+    *) [ -n "${INVOCATION_ID:-}" ] && use=1 ;;
+  esac
+  if [ "$use" = 1 ] && command -v systemd-run >/dev/null 2>&1; then
+    if systemd-run --user --scope --collect --quiet -- \
+         tmux new-session -d -s "$SESSION" "$LAUNCHER" 2>/dev/null; then
+      return 0
+    fi
+    logev WARN launch_scope "systemd-run scope launch failed -> plain tmux fallback (server may not survive this service run)"
+  fi
+  tmux new-session -d -s "$SESSION" "$LAUNCHER"
+}
+
+# Self-heal the resume-pin: the hook layer records the live session id in the
+# session.alive sentinel; if the pin is missing/empty (lost state, fresh deploy)
+# adopt the live sid so the NEXT respawn/heal is lossless again. Never
+# overwrites an existing pin -- an operator-chosen pin always wins.
+maybe_repin(){
+  [ "${RO:-}" = "--status" ] && return 0
+  [ -s "$RESUME_FILE" ] && return 0
+  [ -f "$HOOK_DIR/session.alive" ] || return 0
+  local sid
+  sid="$(grep -oE 'sid=[0-9a-fA-F-]+' "$HOOK_DIR/session.alive" 2>/dev/null | head -1 | cut -d= -f2)"
+  [ -n "$sid" ] || return 0
+  mkdir -p "$(dirname "$RESUME_FILE")" 2>/dev/null || true
+  printf '%s\n' "$sid" > "$RESUME_FILE" 2>/dev/null \
+    && logev INFO resume_repin "resume-pin was missing; adopted live session id from hooks (restarts lossless again)"
+}
+
 # ---- event log + lifecycle --------------------------------------------------
 # One line per noteworthy event, e.g.:
 #   2026-06-24T07:40:11Z WARN  rc_drop        0 conns; kill+resume
@@ -355,16 +426,16 @@ maybe_heartbeat(){ # maybe_heartbeat "rc=active pid=123"
 # sustained outage or a long-unanswered gate does not spam every 60s. Bodies are
 # kept GENERIC -- no session URL / tokens / pane dumps, because the ntfy topic is
 # shared and unauthenticated. No-op under --status, without curl, or FLIGHT_ALERT=0.
-alert(){ # alert KEY PRIORITY TITLE BODY
+alert(){ # alert KEY PRIORITY TITLE BODY [COOLDOWN_SECS]
   [ "${RO:-}" = "--status" ] && return 0
   [ "${FLIGHT_ALERT:-1}" = 0 ] && return 0
   [ -z "$ALERT_URL" ] && return 0   # no topic configured -> alerts disabled
   command -v curl >/dev/null 2>&1 || return 0
-  local key="$1" prio="$2" title="$3" body="$4"
+  local key="$1" prio="$2" title="$3" body="$4" cool="${5:-$ALERT_COOLDOWN_SECS}"
   local cf="$STATE_DIR/alert.$key" now last
   mkdir -p "$STATE_DIR" 2>/dev/null || true
   now="$(date +%s)"; last="$(cat "$cf" 2>/dev/null || echo 0)"
-  [ $(( now - ${last:-0} )) -lt "$ALERT_COOLDOWN_SECS" ] && return 0
+  [ $(( now - ${last:-0} )) -lt "$cool" ] && return 0
   # optional one-tap deep-link: FLIGHT_ALERT_CLICK becomes the ntfy Click action.
   # Point it at an AUTH-GATED, OUT-OF-BAND terminal (Teleport / ttyd / Cockpit /
   # SSH-web) -- NOT the claude.ai session URL, for two reasons: (1) alerts often
@@ -395,7 +466,7 @@ selftest(){
     || chk WARN "$np panes in '$SESSION' -> ops hit the ACTIVE pane; keep claude's pane active/unsplit"
   local P; P="$(flightpid)"
   [ -n "$P" ] && chk OK "claude pid $P (comm-filtered)" || chk WARN "no 'claude --remote-control $RC_LABEL' pid"
-  [ -s "$HOME/.local/state/flight-resume" ] && chk OK "resume-pin present" || chk WARN "resume-pin missing/empty (restarts not lossless)"
+  [ -s "$RESUME_FILE" ] && chk OK "resume-pin present" || chk WARN "resume-pin missing/empty (restarts not lossless)"
   local v; v="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
   if [ -z "$v" ]; then chk WARN "claude --version unreadable"
   elif [ "$v" = "$TESTED_CC_VERSION" ]; then chk OK "Claude Code $v == tested"
@@ -448,13 +519,59 @@ fi
 
 log_rotate
 
+# 0. Host-reboot detection: a reboot kills the long-lived tmux server (that is
+#    exactly how the 2026-07 relaunch loop started). Record boot_id, announce
+#    the reboot ONCE, and reset the breaker budgets -- a fresh boot deserves a
+#    fresh relaunch budget. Silently seeds on first-ever run; skipped where
+#    /proc is absent (macOS).
+if [ "$RO" != "--status" ] && [ -r /proc/sys/kernel/random/boot_id ]; then
+  bid="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+  prev_bid="$(cat "$STATE_DIR/boot_id" 2>/dev/null || true)"
+  if [ -n "$bid" ] && [ "$bid" != "$prev_bid" ]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+    printf '%s\n' "$bid" > "$STATE_DIR/boot_id" 2>/dev/null || true
+    if [ -n "$prev_bid" ]; then
+      logev WARN reboot "host rebooted (boot_id changed); flight died with it and will be relaunched"
+      alert reboot default "flight: host rebooted" "The host rebooted; the flight tmux session died with it and will be auto-relaunched."
+      rm -f "$STATE_DIR/relaunches" "$STATE_DIR/restarts" 2>/dev/null || true
+    fi
+  fi
+fi
+
 # 1. Ensure the session exists.
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
   if [ "$RO" = "--status" ]; then say "flight: DOWN (no tmux session)"; exit 1; fi
+  # Relaunch circuit breaker: a session that is down again every run despite
+  # being relaunched is a CRASH LOOP (claude dying at boot, server being reaped,
+  # broken launcher). Relaunching forever burns cycles and drips alerts for
+  # days; after FLAP_MAX relaunches within FLAP_WINDOW, stop and escalate.
+  rl_file="$STATE_DIR/relaunches"; rl_now="$(date +%s)"; rl_cut=$((rl_now - FLAP_WINDOW))
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+  [ -f "$rl_file" ] && { awk -v c="$rl_cut" '$1>=c' "$rl_file" > "$rl_file.tmp" 2>/dev/null && mv "$rl_file.tmp" "$rl_file"; }
+  rl_n=0; [ -f "$rl_file" ] && rl_n="$(wc -l < "$rl_file" 2>/dev/null)"; rl_n="${rl_n//[^0-9]/}"; rl_n="${rl_n:-0}"
+  if [ "$rl_n" -ge "$FLAP_MAX" ]; then
+    logev ERROR relaunch_flap "relaunch suppressed: $rl_n relaunches within ${FLAP_WINDOW}s and the session keeps dying"
+    alert relaunch_flap urgent "flight: relaunch loop" "flight was relaunched $rl_n times in $((FLAP_WINDOW/60))min and keeps dying right after launch. Auto-relaunch is paused; attach to the host and investigate (expired login? claude crashing? tmux server reaped?)." "$ESCALATION_COOLDOWN_SECS"
+    say ">>> RELAUNCH LOOP: $rl_n relaunches in ${FLAP_WINDOW}s and the session keeps dying -> auto-relaunch paused, escalating."
+    exit 0   # handled condition, not a unit failure -- keep the timer's unit clean
+  fi
+  echo "$rl_now" >> "$rl_file" 2>/dev/null || true
   say "flight DOWN -> launching..."
   logev WARN relaunch "tmux session was down; launched via $LAUNCHER"
-  alert relaunch default "flight: session relaunched" "flight tmux session was down and has been auto-relaunched (conversation resumed via resume-pin)."
-  tmux new-session -d -s "$SESSION" "$LAUNCHER"; sleep 6
+  if [ -s "$RESUME_FILE" ]; then
+    alert relaunch default "flight: session relaunched" "flight tmux session was down and has been auto-relaunched (conversation resumed via resume-pin)."
+  else
+    logev WARN resume_missing "resume-pin absent/empty -> relaunch starts a BLANK conversation"
+    alert relaunch default "flight: session relaunched" "flight tmux session was down and has been auto-relaunched. NOTE: no resume-pin, so this is a NEW blank conversation."
+  fi
+  launch_detached; sleep 6
+  # Verify the launch actually took: a session already gone again here is the
+  # crash-loop signature -- make it visible instead of waiting for next run.
+  if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    logev ERROR relaunch_died "session died within seconds of launch (crash loop building)"
+    say ">>> relaunched session ALREADY GONE (died within seconds) -- breaker will trip after $FLAP_MAX of these."
+    exit 0   # handled condition, not a unit failure
+  fi
 fi
 
 # 2/3. Settle prompts: accept trust, heal harmless gates. (skip in --status)
@@ -521,6 +638,30 @@ if [ "$ak" = auth ] || grep -qiE "$AUTH_RE" <<<"$pj"; then
   fi
 fi
 
+# 4c. Inner-claude CRASH LOOP: the tmux session is up but claude keeps exiting
+#     and the launcher keeps respawning it (its exit banner piles up in the
+#     pane; a healthy claude clears the screen, so >=2 banners means a loop).
+#     Neither a relaunch nor kill+resume can fix this -- the wrapper already
+#     respawns. Surface it loudly instead of looping silently; an expired
+#     interactive login is the common cause (seen live 2026-07), so check auth
+#     first and say "/login" when that is what is needed. The banner count alone
+#     is not enough -- it is ordinary text, and reading the launcher source in
+#     the session would fire it -- so corroborate against the process itself.
+crashes="$(grep -c '\[flight-claude\] claude exited rc=' <<<"$pj")" || true; crashes="${crashes:-0}"
+if [ "$crashes" -ge 2 ] && claude_young_or_absent; then
+  if [ "$RO" = "--status" ]; then say "flight: CLAUDE CRASH-LOOPING (wrapper respawning; investigate)"; exit 5; fi
+  if ! auth_ok; then
+    logev ERROR crashloop "claude exiting at boot x$crashes and auth status=NOT logged in -> /login needed"
+    alert auth urgent "flight: re-login needed (claude crash-looping)" "claude exits right after launch and auth status says NOT logged in. Attach the flight session and run /login." "$ESCALATION_COOLDOWN_SECS"
+  else
+    logev ERROR crashloop "claude exiting right after launch x$crashes (wrapper respawn loop); needs a human"
+    alert crashloop high "flight: claude crash-looping" "claude keeps exiting right after launch inside the flight session (the wrapper keeps respawning it). Auto-heal cannot fix this; attach to the host and read the pane." "$ESCALATION_COOLDOWN_SECS"
+  fi
+  say ">>> claude is CRASH-LOOPING inside the session (exit banner x$crashes; wrapper respawning)."
+  say "----- pane -----"; pane | tail -18
+  exit 0
+fi
+
 # 5. Wedged TUI: "Waiting..." (no spinner clock) + no child + flat CPU + frozen frame.
 if grep -q "Waiting" <<<"$p" && [ -z "$(spinner_elapsed)" ] && [ -n "$(flightpid)" ]; then
   P="$(flightpid)"; kids="$(kids_of "$P")"
@@ -585,6 +726,7 @@ if [ "$HEALED" = 0 ] && ! grep -qE "$GATE_RE" <<<"$p" && [ -z "$(spinner_elapsed
 fi
 
 # 9. Status report (remote-control state from socket truth, not a pane grep).
+maybe_repin
 p="$(pane)"
 url="$(grep -oE 'https://claude.ai/code/session_[A-Za-z0-9]+' <<<"$p" | tail -1)"
 if [ "$HEALED" = 1 ]; then rc="re-established"

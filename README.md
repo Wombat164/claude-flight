@@ -287,7 +287,24 @@ the script's own defaults are generic so it is publishable as-is. See
 [`flight-doctor.conf.example`](flight-doctor.conf.example) for the full list.
 Key ones: `FLIGHT_SESSION`, `FLIGHT_RC_LABEL`/`FLIGHT_HOST`, `FLIGHT_LAUNCHER`,
 `FLIGHT_NTFY_URL`, `FLIGHT_STALL_SECS`, `FLIGHT_FLAP_MAX`/`_WINDOW`,
-`FLIGHT_LOG_MAX_BYTES`/`_KEEP_LINES`.
+`FLIGHT_LOG_MAX_BYTES`/`_KEEP_LINES`, `FLIGHT_SCOPE_LAUNCH`,
+`FLIGHT_ESCALATION_COOLDOWN_SECS`, `FLIGHT_CRASHLOOP_YOUNG_SECS`,
+`FLIGHT_RESUME_FILE`.
+
+**Running under systemd: the launch must be detached.** A `Type=oneshot` service
+with systemd's default `KillMode=control-group` reaps whatever is left in its
+cgroup when the run finishes. If the watchdog starts a *new* tmux server (there
+was none, e.g. after a reboot), that server is born inside the service cgroup and
+dies seconds later, so the next run finds the session missing and launches
+again -- forever, while every run reports success. The symptom is a relaunch loop
+after a reboot plus a trail of orphan transcripts.
+
+The watchdog therefore relaunches through `systemd-run --user --scope` whenever
+it detects it is running under systemd (`INVOCATION_ID`), which puts the tmux
+server in its own scope. `FLIGHT_SCOPE_LAUNCH=auto|1|0` forces the choice; the
+shipped unit also sets `KillMode=process` as a backstop for the fallback path.
+Adding a session to an *existing* server was never affected, which is why this
+only ever bites from cold.
 
 **Naming.** The **tmux session name** (`FLIGHT_SESSION`, default `flight`) is
 deliberately *separate* from the **remote-control name** shown in the Claude Code
