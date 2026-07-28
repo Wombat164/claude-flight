@@ -8,6 +8,10 @@ Type=oneshot
 # %h = the user's home. Adjust if you install the script elsewhere.
 ExecStart=%h/.local/bin/flight-doctor
 Nice=10
+# The systemd --user manager's PATH does not include ~/.local/bin, where the
+# native Claude Code installer puts `claude`. The script hardens this itself;
+# this is the belt-and-braces so anything else it shells out to is found too.
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # The doctor may RELAUNCH the flight tmux session. When no tmux server exists
 # yet (first boot, post-reboot), `tmux new-session` forks a NEW server that
 # lands in THIS service's cgroup -- with the default KillMode=control-group,
