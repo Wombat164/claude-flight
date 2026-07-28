@@ -15,6 +15,9 @@ cd "$HOME" || exit 1
 # looks exactly like a dropped channel, burning restart cycles forever. Clear
 # them so RC uses the interactive (claude.ai) credential.
 unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY
+# Native installer puts claude in ~/.local/bin, which systemd --user
+# does not inherit -- hardened here so timer-triggered relaunches never rc=127.
+export PATH="$HOME/.local/bin:$PATH"
 # Source the same site config the watchdog reads, so a FLIGHT_RC_LABEL / FLIGHT_HOST
 # override applies to BOTH the launcher and flight-doctor (they must agree on the
 # remote-control name). Set FLIGHT_CONF=/dev/null to skip.
