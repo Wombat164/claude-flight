@@ -5,7 +5,7 @@
 <h1 align="center">claude-flight</h1>
 
 <p align="center">
-  Keep a remote-controllable <b>Claude Code</b> session alive and self-heal it --
+  Keep a remote-controllable <b>Claude Code</b> session alive and self-heal it:
   an unattended watchdog that approves routine permission gates and <b>holds
   catastrophic ones</b>.<br>
   A power tool with a real footgun: read <a href="SECURITY.md">SECURITY.md</a> first.
@@ -37,7 +37,7 @@
 > first. Auto-approval is a convenience for unattended operation, **not** a
 > security boundary.
 
-**FLIGHT** -- *Failsafe Liveness & Idle Guardian for Headless Terminals* -- is a
+**FLIGHT** (*Failsafe Liveness & Idle Guardian for Headless Terminals*) is a
 persistent, remote-controllable **Claude Code** session you leave running on an
 always-on box and reach from your phone or laptop while travelling.
 **`flight-doctor`** is its self-healing watchdog.
@@ -47,7 +47,7 @@ silently degrade in ways the built-in auto-reconnect does not cover: the Remote
 Control websocket drops after a long idle, a tool call wedges, a spinner stalls,
 a permission gate blocks forever, the API has an outage, or your credentials
 expire. `flight-doctor` is a small, dependency-light Bash script (run every ~60s
-by a systemd timer) that detects each of these and takes the *right* action --
+by a systemd timer) that detects each of these and takes the *right* action,
 including refusing to act when a restart would not help.
 
 > Not affiliated with Anthropic. "Claude Code" is Anthropic's product; this is a
@@ -60,15 +60,15 @@ fork and adapt.
 ### From copilot to pilot
 
 An AI coding agent is a *copilot* when every action needs a human hand on the
-yoke. It edges toward *pilot* -- acting on its own within a safe envelope -- the
+yoke. It edges toward *pilot*, acting on its own within a safe envelope, the
 way aviation autopilots earned trust: not by being smarter, but by **envelope
-protection** -- hard limits it cannot cross, and a human it pages when something
+protection**. Hard limits it cannot cross, and a human it pages when something
 nears the edge. flight-doctor is that envelope for an unattended Claude Code
 session: routine actions proceed, catastrophic ones are held for a human, and the
 agent is restarted or stood down when continuing would do harm. The guardrails
 are what *buy* the autonomy.
 
-They buy it; they do not guarantee it. A denylist narrows the envelope -- it is
+They buy it; they do not guarantee it. A denylist narrows the envelope; it is
 not a certificate of safe flight (this project shipped, and then fixed, denylist
 bypasses). Treat the autonomy as *earned and bounded*, and read
 [SECURITY.md](SECURITY.md) before you trust it unattended.
@@ -78,8 +78,9 @@ bypasses). Treat the autonomy as *earned and bounded*, and read
 ## Quickstart
 
 It's a dependency-light Bash script run every ~60s. Install by picking a
-[deployment profile](#deployment-profiles) then the [install steps](#install) --
-**read [SECURITY.md](SECURITY.md) first** (it auto-approves commands). Once running,
+[deployment profile](#deployment-profiles), then following the
+[install steps](#install). **Read [SECURITY.md](SECURITY.md) first**, because it
+auto-approves commands. Once running,
 `flight-doctor --selftest` reports health + TUI/upgrade drift:
 
 ```text
@@ -120,7 +121,7 @@ has to notice and fix. `flight-doctor` is the missing watchdog:
 - All recovery is **lossless**: a pinned session UUID means every restart
   resumes the *same* conversation.
 
-## Prior art -- why not just systemd / monit / a liveness probe?
+## Prior art: why not just systemd, monit, or a liveness probe?
 
 Use those for what they are good at; flight-doctor sits a layer above them.
 
@@ -132,14 +133,14 @@ Use those for what they are good at; flight-doctor sits a layer above them.
 
 flight-doctor's narrow, genuinely-different surface:
 - it heals a **live process whose Remote Control websocket silently died**
-  (detected by socket count, not by the process being gone) -- a generic
-  supervisor sees a healthy process and does nothing;
+  (detected by socket count, not by the process being gone). A generic
+  supervisor sees a healthy process and does nothing.
 - it **declines to restart** when a restart cannot help (API outage, expired
-  credential) instead of thrashing -- the inverse of "always restart";
+  credential) instead of thrashing. This is the inverse of "always restart".
 - it **answers a semantic UI prompt** (the permission gate), approving routine
   and holding catastrophic.
 
-If all you need is "restart the process when it dies," use systemd -- and in fact
+If all you need is "restart the process when it dies," use systemd. In fact
 flight-doctor runs *under* a systemd timer. It is the supervisor for the failures
 a supervisor cannot see.
 
@@ -147,27 +148,27 @@ a supervisor cannot see.
 
 Other tools overlap on pieces of this; none combine them. claude-flight is the
 union of *keep the session alive* + *denylist-gated auto-approve* + *detect a
-dropped channel* + *alert* -- which none of these ship together.
+dropped channel* and *alert*, a combination none of these ship.
 
-- **[gpayne9/claude-always-on](https://github.com/gpayne9/claude-always-on)** --
+- **[gpayne9/claude-always-on](https://github.com/gpayne9/claude-always-on)**:
   closest: self-healing remote-control sessions via a tmux restart loop + health
   monitor + backoff. No semantic auto-approve, no catastrophic denylist, no
   websocket-drop detection (macOS-focused).
-- **[claude-yolo](https://github.com/claude-yolo/claude-yolo)** -- the same
+- **[claude-yolo](https://github.com/claude-yolo/claude-yolo)**: the same
   `capture-pane` + `send-keys` auto-approve mechanism, but **no denylist**: it
   approves every prompt, destructive ones included. The unsafe baseline this
   improves on.
-- **[mixpeek/amux](https://github.com/mixpeek/amux)** -- fleet multiplexer that
+- **[mixpeek/amux](https://github.com/mixpeek/amux)**: fleet multiplexer that
   restarts sessions and unblocks stuck prompts by type; an orchestration tool, no
   safety denylist.
-- **[flavio87/tap-to-tmux](https://github.com/flavio87/tap-to-tmux)** -- ntfy
+- **[flavio87/tap-to-tmux](https://github.com/flavio87/tap-to-tmux)**: ntfy
   alerts when an agent needs attention, with per-project dedup and deep links; it
   *pages*, it doesn't *act*.
-- **[a5c-ai/babysitter](https://github.com/a5c-ai/babysitter)** -- enforced human
+- **[a5c-ai/babysitter](https://github.com/a5c-ai/babysitter)**: enforced human
   gates + `harness:doctor`/`harness:resume` + an event journal; a build-time
   orchestrator, not a session watchdog (naming lineage for "doctor").
 - **[Anthropic Auto Mode](https://www.anthropic.com/engineering/claude-code-auto-mode)**
-  -- the official safety analogue: a model classifier + circuit breaker + hard
+  is the official safety analogue,: a model classifier + circuit breaker + hard
   denylist. claude-flight is the deterministic, terminal-level version that works
   on the Remote Control TUI where the classifier is not in the loop.
 
@@ -193,22 +194,31 @@ is the watchdog the official feature lacks.
 
 ### Recovery state machine (in order, first match wins)
 
-1. **Session missing** -> launch it (and alert `relaunch`).
-2. **Trust prompt** -> accept.
-3. **Routine permission gate** -> approve (so unattended work continues).
-4. **Catastrophic gate** (denylist) -> HOLD, alert, never auto-approve.
-5. **Auth / credential / billing failure** -> HOLD, alert. A restart cannot fix
+1. **Host rebooted** (`boot_id` changed) -> note it and reset the breaker budgets,
+   so a reboot does not inherit a stale one.
+2. **Session missing** -> relaunch, detached into its own scope. Counted toward
+   the breaker; at the cap it stops relaunching and escalates once.
+3. **Trust prompt** -> accept.
+4. **Routine permission gate** -> approve, so unattended work continues.
+5. **Catastrophic gate** (denylist) -> HOLD, alert, never auto-approve.
+6. **Auth / credential / billing failure** -> HOLD, alert. A restart cannot fix
    an expired credential.
-6. **Wedged tool call** -> kill + resume (lossless).
-7. **Stalled spinner** -> send Escape; if that fails, kill + resume.
-8. **RC websocket dropped while idle** -> kill + resume (guarded by the outage
-   probe and the flap breaker).
+7. **Inner crash loop** (the launcher respawning a dying process) -> HOLD, alert,
+   naming `/login` when an expired credential is the cause. Neither relaunch nor
+   kill+resume can fix this, because the wrapper is already respawning.
+8. **Wedged tool call** -> kill + resume, losslessly.
+9. **Stalled spinner** -> send Escape; if that fails, kill + resume.
+10. **RC websocket dropped while idle** -> kill + resume, guarded by the outage
+    probe and the flap breaker.
 
-Every kill+resume is gated by:
-- the **outage probe** -- if the API is unreachable, it refuses and alerts
-  rather than thrashing;
-- the **flap circuit breaker** -- after `FLAP_MAX` restarts within
-  `FLAP_WINDOW`, it stops and escalates.
+Steps 1, 5, 6 and 7 are *refusals to act*, and that is the point. Half of what
+this does is decline to restart into a wall.
+
+Every kill+resume and every relaunch is gated by:
+- the **outage probe**. If the API is unreachable it refuses and alerts rather
+  than thrashing.
+- the **flap circuit breaker**. After `FLAP_MAX` events within `FLAP_WINDOW` it
+  stops and escalates once, on a long cooldown, instead of notifying forever.
 
 ### Safety model
 
@@ -220,8 +230,8 @@ disk/filesystem ops, network-lockout (`ufw`/`iptables`/`nft`), cloud-infra
 destruction (`hcloud`/`aws`/`gcloud`/...), mass prune, recursive perms from
 root, data-loss git (`reset --hard`, `clean -f`, `push`), pipe-to-shell remote
 execution, IaC `destroy`, and package purges. Tune it to your environment without
-editing the script -- add ERE patterns to `~/.config/flight-denylist` (one per
-line) or `FLIGHT_MUTATION_EXTRA`; both are OR'd into the built-in list. It is a
+editing the script: add ERE patterns to `~/.config/flight-denylist` (one per
+line), or set `FLIGHT_MUTATION_EXTRA`. Both are OR'd into the built-in list. It is a
 denylist, so review the gaps before trusting it unattended.
 
 ## Logging and lifecycle
@@ -246,21 +256,28 @@ Example excerpt (sanitized):
 
 ## Alerting (optional)
 
-Critical events (`relaunch`, `mutation_hold`, `auth_hold`, `outage_hold`,
-`flap`) can post to an [ntfy](https://ntfy.sh) topic for a phone push. Alerts
-are **off by default** -- set `FLIGHT_NTFY_URL` to enable. They are rate-limited
-per event key, and bodies are deliberately **generic** (no session URL, tokens,
-or pane contents), because an ntfy topic is a shared bearer capability.
+Critical events can post to an [ntfy](https://ntfy.sh) topic for a phone push:
+`relaunch`, `mutation_hold`, `auth_hold`, `outage_hold`, `crashloop`, `reboot`,
+and the two breaker escalations `flap` and `relaunch_flap`.
+
+Alerts are **off by default**. Set `FLIGHT_NTFY_URL` to enable them. They are
+rate-limited per event key, and breaker escalations use a much longer cooldown
+(`FLIGHT_ESCALATION_COOLDOWN_SECS`, default 6h) because once a breaker holds,
+every subsequent run hits it. A 30-minute cooldown there would still mean about
+48 notifications a day, for days.
+
+Bodies are deliberately **generic**, carrying no session URL, tokens, or pane
+contents, because an ntfy topic is a shared bearer capability.
 
 ## Deployment profiles
 
 Pick the row that matches where you're running this. **Egress restriction and
-keeping the Remote Control URL secret apply to every row** -- they cost nothing
+keeping the Remote Control URL secret apply to every row.** They cost nothing
 and contain a hijacked or prompt-injected agent regardless of privilege.
 
 | Profile | You're running on... | Run as | Credentials | Auto-approve |
 |---|---|---|---|---|
-| **Personal dev box** | a single-user host you own and administer | yourself / a privileged user -- it *is* your remote dev box | your normal ones (you accept the reach) | tune `MUTATION_RE` to your stack, or hand-run `flight-doctor` |
+| **Personal dev box** | a single-user host you own and administer | yourself / a privileged user, since it *is* your remote dev box | your normal ones (you accept the reach) | tune `MUTATION_RE` to your stack, or hand-run `flight-doctor` |
 | **Shared / sensitive host** | a multi-user box, or one holding prod secrets, others' data, or a pivot to other systems | a **dedicated unprivileged user** (no blanket sudo, no `docker`/`wheel` group) | **scoped**: K8s `Role` not cluster-admin, project-scoped cloud token, read-only secret tokens | denylist + hold more than default; alert on holds; review the event log |
 | **Throwaway sandbox** | a disposable VM you rebuild freely, nothing valuable on it | whatever is convenient | none / minimal | full auto is fine |
 
@@ -308,7 +325,7 @@ with systemd's default `KillMode=control-group` reaps whatever is left in its
 cgroup when the run finishes. If the watchdog starts a *new* tmux server (there
 was none, e.g. after a reboot), that server is born inside the service cgroup and
 dies seconds later, so the next run finds the session missing and launches
-again -- forever, while every run reports success. The symptom is a relaunch loop
+again, forever, while every run reports success. The symptom is a relaunch loop
 after a reboot plus a trail of orphan transcripts.
 
 The watchdog therefore relaunches through `systemd-run --user --scope` whenever
@@ -328,8 +345,8 @@ identically, so a single config override keeps them in sync.
 
 ## Hooks: structured signals (optional)
 
-Detection currently scrapes the TUI. A more robust path -- immune to UI restyling
-and to pane-content injection -- is Claude Code's own lifecycle hooks.
+Pane scraping is the fallback, not the foundation. The sturdier path, immune to
+UI restyling and to pane-content injection, is Claude Code's own lifecycle hooks.
 [`hooks/flight-notify.sh`](hooks/flight-notify.sh) is a receiver Claude Code
 invokes on each event; it writes atomic **sentinel files** into the state dir
 (`gate.pending` on a permission prompt, `apifail` on an API/auth failure,
@@ -350,44 +367,52 @@ and if the session runs in **Auto Mode**, Claude's own classifier handles benign
 gates, so no `permission_prompt` fires (flight-doctor's gate handling applies in
 default/accept-edits mode).
 
-flight-doctor **consumes** these sentinels sentinel-first (with pane-scrape
-fallback) -- e.g. a `StopFailure` sentinel forces an outage-hold deterministically,
-and `gate.pending` corroborates a permission gate. It is wired and, where the hook
-layer is enabled, active.
+flight-doctor reads these **sentinel-first**, falling back to scraping the pane.
+A fresh `StopFailure` sentinel forces an outage-hold deterministically;
+`gate.pending` corroborates a permission gate; `session.alive` is what a missing
+resume-pin is healed from. Sentinels are checked for freshness, so a hook that
+stopped firing cannot silently pin a stale state.
+
+The hook layer is optional and additive. Everything still works without it, just
+with pane text as the only evidence.
 
 ## Testing
 
 ```sh
-bin/flight-doctor.test.sh              # unit suite (helpers, regexes, sentinels)
-bin/flight-doctor.integration.test.sh  # whole if-ladder vs canned pane fixtures
-bin/flight-doctor.live.test.sh         # LIVE smoke test vs REAL tmux (fake pane)
+bin/flight-doctor.test.sh              # unit: helpers, regexes, sentinels (140 assertions)
+bin/flight-doctor.integration.test.sh  # whole if-ladder vs canned pane fixtures (24)
+bin/flight-doctor.live.test.sh         # live smoke test vs REAL tmux, fake pane
 FLIGHT_LIVE_CLAUDE=1 \
-  bin/flight-doctor.live-claude.test.sh  # opt-in: REAL handicapped claude (local only)
+  bin/flight-doctor.live-claude.test.sh  # opt-in: real handicapped claude, local only
 ```
 
-The **integration** suite drives the entire decision if-ladder against stub
+**Unit.** Sources the script in library mode (`FLIGHT_DOCTOR_LIB=1`) so only the
+pure helpers load, then exercises them with mocked `ss`, `curl`, `kill`, `tmux`
+and `date`. No real session is touched, no network call is made, no process is
+killed. Covers socket parsing, the reachability probe, the auth and catastrophic
+regexes (positive *and* false-positive cases), the comm-filtered pid resolver,
+the outage-guarded restart, both circuit breakers, the scope-launch matrix,
+resume-pin self-heal, logging and the read-only `--status` guard, rotation, the
+heartbeat rate limiter, and alert rate-limiting, opt-outs and generic-body
+guarantees.
+
+**Integration.** Drives the entire decision if-ladder against stub
 `tmux`/`pgrep`/`ss`/`curl`/`claude` and recorded pane fixtures, asserting the
-DECISION (approve routine gate / hold mutation gate / hold auth / restart on RC
-drop / refuse restart on outage) -- the coverage the unit suite can't reach.
+*decision*: approve routine gate, hold mutation gate, hold auth, restart on RC
+drop, refuse restart on outage, relaunch from cold via a scope, trip the
+relaunch breaker, detect a crash loop, detect a reboot. This is the coverage the
+unit suite cannot reach.
 
-Because mocked tmux can't model real **target semantics** (mocks once hid a bug
-where the exact-match form `-t "=NAME"` returns an *empty* pane for `capture-pane`
-and blinded the watchdog), two **live** tests exercise the real thing: the CI-safe
-one drives a **real tmux** session with a fake pane (no claude); the opt-in
-`live-claude` one spins a **real but handicapped** `claude --remote-control` in a
-throwaway dir (unique RC name, killed immediately) and asserts the watchdog detects
-+ accepts its **real trust prompt**. It needs credentials, so it is local-only --
-never CI. Both stub-tmux suites also now model the `=NAME` rejection so the
-regression can't silently return.
-
-The unit suite sources the script in **library mode** (`FLIGHT_DOCTOR_LIB=1`) so only
-the pure helpers load, then exercises them with mocked `ss`/`curl`/`kill`/
-`tmux`/`date`. No real session is touched, no network call is made, no process
-is killed. It covers socket parsing, the reachability probe, the auth and
-catastrophic regexes (positive and false-positive cases), the comm-filtered pid
-resolver, the outage-guarded restart, the flap breaker, logging + the read-only
-`--status` guard, rotation, the heartbeat rate limiter, and alert
-rate-limiting / opt-outs / generic-body guarantees.
+**Live.** Mocked tmux cannot model real target semantics. Mocks once hid a bug
+where the exact-match form `-t "=NAME"` returns an *empty* pane for
+`capture-pane`, silently blinding the watchdog. So two tests exercise the real
+thing: a CI-safe one drives a real tmux session with a fake pane and no claude,
+and an opt-in `live-claude` one spins a real but handicapped
+`claude --remote-control` in a throwaway dir (unique RC name, killed
+immediately) and asserts the watchdog detects and accepts its **real** trust
+prompt. That one needs credentials, so it is local-only and never runs in CI.
+Both stub-tmux suites now model the `=NAME` rejection, so the regression cannot
+quietly return.
 
 ## Security considerations
 
@@ -401,8 +426,8 @@ rate-limiting / opt-outs / generic-body guarantees.
 - ntfy topics are shared bearer capabilities (read + inject). Use an
   authenticated or self-hosted instance for anything sensitive; keep alert
   bodies generic (this tool does).
-- The session's Remote Control URL is itself reach-to-control -- protect it like
-  a credential and do not paste it into shared logs.
+- The session's Remote Control URL is itself reach-to-control. Protect it like
+  a credential, and never paste it into shared logs.
 
 See [SECURITY.md](SECURITY.md) for the full threat model, the denylist's known
 limits, and the preconditions you are accepting by running this unattended.
@@ -412,7 +437,7 @@ limits, and the preconditions you are accepting by running this unattended.
 **Tested against Claude Code `2.1.220`.** The Claude Code *CLI version* is the
 compatibility factor that matters: detection keys off the CLI's behavior and its
 (undocumented) TUI strings, so a future release can change them. Run a version at
-or above the tested one and re-validate after upgrades -- `flight-doctor --selftest`
+or above the tested one, and re-validate after upgrades. `flight-doctor --selftest`
 is a read-only drift canary that flags exactly this (version change, a detector
 regex that stopped matching its fixture, hooks that stopped firing, lost auth).
 
@@ -430,28 +455,40 @@ uses newer sub-commands such as `claude auth status --json`.)
 - **bash >= 4.4** (arrays + `set -u`-safe empty-array expansion)
 - **tmux**, and the **`claude` CLI** with `--remote-control` support
 - **GNU coreutils** (`stat -c`, `date`, `du`, `timeout`) + **grep / sed / awk**
-- **iproute2** (`ss`) on Linux / **lsof** on macOS -- socket-truth RC-drop detection
-- **util-linux** (`flock`) on Linux / a mkdir-lock fallback on macOS -- single-instance guard
+- **iproute2** (`ss`) on Linux / **lsof** on macOS, for socket-truth RC-drop detection
+- **util-linux** (`flock`) on Linux / a mkdir-lock fallback on macOS, for the single-instance guard
 - **procps** (`pgrep` / `ps`)
 - optional: **curl** (reachability probe + ntfy alerts), **jq** (hook receiver),
-  **systemd** (any ~60s scheduler works -- cron/launchd too)
+  **systemd** (any ~60s scheduler works, cron and launchd included)
 
 **Platform support:**
 
 | Platform | Status |
 |---|---|
 | Linux, glibc + GNU coreutils (Debian / Ubuntu / Fedora / Arch) | ✅ supported, CI-tested |
-| Linux, musl / busybox (Alpine) | ✅ supported -- `apk add bash coreutils iproute2 util-linux procps`; CI-tested |
-| macOS | ⚠️ best-effort -- the `ss`->`lsof`, `flock`->mkdir-lock and BSD-`stat` shims are validated on **real Apple silicon** (shim primitives on a physical M-series Mac + the full `macos.test.sh` and suites on a macOS CI runner); needs bash 4.4 + GNU coreutils (Homebrew). The one remaining gap is an end-to-end run with a real `claude` session |
-| Windows | ❌ not native -- run it inside **WSL** (= Linux). It is a server-side tmux watchdog, not a desktop app |
+| Linux, musl / busybox (Alpine) | ✅ supported. `apk add bash coreutils iproute2 util-linux procps`; CI-tested |
+| macOS | ⚠️ best-effort. The `ss`->`lsof`, `flock`->mkdir-lock and BSD-`stat` shims are validated on **real Apple silicon** (shim primitives on a physical M-series Mac + the full `macos.test.sh` and suites on a macOS CI runner); needs bash 4.4 + GNU coreutils (Homebrew). The one remaining gap is an end-to-end run with a real `claude` session |
+| Windows | ❌ not native. Run it inside **WSL** (= Linux). It is a server-side tmux watchdog, not a desktop app |
 
-This is a **Linux-first** tool -- it lives on an always-on host next to tmux.
-A *green CI job* for a platform means its **test suites** pass there (tmux / `ss` /
-`flock` are mocked); the status column above is about the **runtime**. macOS
-portability (lsof/flock/coreutils shims) is implemented and validated on real Apple
-silicon; the remaining gap is a full end-to-end run with a real claude session.
+This is a **Linux-first** tool. It lives on an always-on host next to tmux.
 
+Read the status column as being about the *runtime*. A green CI job for a
+platform only means the **test suites** pass there, with tmux, `ss` and `flock`
+mocked.
+
+## Documentation
+
+- **[Docs site](https://wombat164.github.io/claude-flight/)**: tutorials,
+  how-to guides, full configuration reference, and the reasoning behind the
+  design.
+- **[SECURITY.md](SECURITY.md)**: threat model and the preconditions you accept
+  by running this unattended.
+- **[CHANGELOG.md](CHANGELOG.md)**: what changed, per release.
+- **[assets/BRAND.md](assets/BRAND.md)**: the visual identity, if you are
+  touching the artwork.
+
+When the docs and the script disagree, the script wins. Please open an issue.
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
