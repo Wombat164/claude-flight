@@ -8,3 +8,12 @@ Type=oneshot
 # %h = the user's home. Adjust if you install the script elsewhere.
 ExecStart=%h/.local/bin/flight-doctor
 Nice=10
+# The doctor may RELAUNCH the flight tmux session. When no tmux server exists
+# yet (first boot, post-reboot), `tmux new-session` forks a NEW server that
+# lands in THIS service's cgroup -- with the default KillMode=control-group,
+# systemd reaps it the moment the oneshot run finishes, so the relaunch never
+# survives and the doctor loops forever (proven live 2026-07 after a host
+# reboot). The script's primary fix is detaching the server via
+# `systemd-run --user --scope`; KillMode=process is the belt-and-braces backstop
+# so even the plain-tmux fallback path survives the run.
+KillMode=process
