@@ -82,12 +82,21 @@ cat > "$S/claude" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
   *"auth status"*) printf '{"loggedIn": %s}\n' "${FIX_AUTH:-true}"; [ "${FIX_AUTH:-true}" = true ] && exit 0 || exit 1 ;;
-  *--version*) echo "2.1.190 (Claude Code)" ;;
+  # Tracks TESTED_CC_VERSION from the script under test (see FIX_CC_VERSION
+  # below), so this fixture cannot silently drift out of date the way a
+  # hardcoded version does. Override FIX_CC_VERSION to simulate a drifted host.
+  *--version*) echo "${FIX_CC_VERSION:-0.0.0} (Claude Code)" ;;
 esac
 exit 0
 EOF
 for c in sleep flock; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$c"; done
 chmod +x "$S"/*
+# Read the tested version out of the script under test rather than hardcoding it
+# here. A literal would drift every time TESTED_CC_VERSION is bumped, and since
+# nothing asserts on it the drift would go unnoticed.
+FIX_CC_VERSION="$(sed -n 's/^TESTED_CC_VERSION="\([^"]*\)".*/\1/p' "$DOC" | head -1)"
+[ -n "$FIX_CC_VERSION" ] || { echo "FATAL: could not read TESTED_CC_VERSION from $DOC" >&2; exit 1; }
+export FIX_CC_VERSION
 # `kill` is a bash BUILTIN, so a PATH stub never intercepts it; override via an
 # exported function (inherited by the `bash "$DOC"` child, where it shadows the builtin).
 kill(){ echo "kill $*" >> "$ACTIONS"; }; export -f kill
